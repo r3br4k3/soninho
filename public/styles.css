@@ -447,6 +447,12 @@ select {
   align-items: center;
 }
 
+.panel-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .card:not(.panel-head):not(.topbar):not(.bottom-nav):not(.stat-card) {
   padding: 14px;
 }
@@ -529,6 +535,33 @@ select {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.friend-list {
+  display: grid;
+  gap: 8px;
+}
+
+.friend-item {
+  border: 1px solid #d2c4f7;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fdfbff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.friend-item p {
+  margin: 0;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .calendar-nav {
@@ -622,7 +655,7 @@ select {
   transform: translateX(-50%);
   width: min(980px, 92vw);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   padding: 8px;
   backdrop-filter: blur(8px);
 }

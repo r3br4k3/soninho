@@ -88,7 +88,10 @@
         <section id="tab-journal" class="tab-panel active">
           <div class="card panel-head">
             <h3>Diario dos Sonhos</h3>
-            <input type="date" id="dreamDate" />
+            <div class="panel-controls">
+              <select id="journalOwnerSelect"></select>
+              <input type="date" id="dreamDate" />
+            </div>
           </div>
 
           <div class="card">
@@ -194,6 +197,32 @@
             <p id="reminderMessage" class="message"></p>
           </div>
         </section>
+
+        <section id="tab-friends" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Amigos</h3>
+          </div>
+
+          <div class="card">
+            <h4>Adicionar amigo</h4>
+            <form id="friendSearchForm" class="inline-form">
+              <input type="text" id="friendQuery" placeholder="Digite nome ou email" required />
+              <button type="submit" class="btn-primary">Buscar</button>
+            </form>
+            <div id="friendSearchResults" class="friend-list"></div>
+            <p id="friendMessage" class="message"></p>
+          </div>
+
+          <div class="card">
+            <h4>Pedidos recebidos</h4>
+            <div id="incomingRequests" class="friend-list"></div>
+          </div>
+
+          <div class="card">
+            <h4>Meus amigos</h4>
+            <div id="friendsList" class="friend-list"></div>
+          </div>
+        </section>
       </main>
 
       <nav class="bottom-nav card">
@@ -202,6 +231,7 @@
         <button class="nav-btn" data-tab="tags" title="Tags">🏷️<span>Tags</span></button>
         <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
         <button class="nav-btn" data-tab="reminders" title="Lembretes">⏰<span>Lembretes</span></button>
+        <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
       </nav>
     </div>
 

@@ -49,6 +49,32 @@ async function authMiddleware(req, res, next) {
   }
 }
 
+async function areFriends(db, userA, userB) {
+  const relation = await db.get(
+    `SELECT id
+     FROM friend_requests
+     WHERE status = 'accepted'
+       AND ((requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?))`,
+    [userA, userB, userB, userA]
+  );
+  return Boolean(relation);
+}
+
+async function resolveViewerTargetUserId(db, viewerId, requestedUserId) {
+  if (!requestedUserId) return viewerId;
+
+  const targetUserId = Number(requestedUserId);
+  if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+    throw new Error("Identificador de usuario invalido");
+  }
+
+  if (targetUserId === viewerId) return viewerId;
+
+  const canView = await areFriends(db, viewerId, targetUserId);
+  if (!canView) throw new Error("Acesso permitido apenas para amigos");
+  return targetUserId;
+}
+
 app.post("/api/auth/register", async (req, res) => {
   const { name, email, password, deviceId, deviceName } = req.body;
   if (!name || !email || !password || !deviceId) {
@@ -100,6 +126,129 @@ app.get("/api/auth/me", authMiddleware, async (req, res) => {
   const db = await getDb();
   const user = await db.get("SELECT id, name, email, created_at FROM users WHERE id = ?", [req.user.id]);
   return res.json({ user });
+});
+
+app.get("/api/friends", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const friends = await db.all(
+    `SELECT
+      CASE WHEN fr.requester_id = ? THEN u2.id ELSE u1.id END AS id,
+      CASE WHEN fr.requester_id = ? THEN u2.name ELSE u1.name END AS name,
+      CASE WHEN fr.requester_id = ? THEN u2.email ELSE u1.email END AS email,
+      fr.created_at
+     FROM friend_requests fr
+     JOIN users u1 ON u1.id = fr.requester_id
+     JOIN users u2 ON u2.id = fr.addressee_id
+     WHERE fr.status = 'accepted'
+       AND (fr.requester_id = ? OR fr.addressee_id = ?)
+     ORDER BY name`,
+    [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
+  );
+
+  return res.json({ friends });
+});
+
+app.get("/api/friends/requests", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const incoming = await db.all(
+    `SELECT fr.id, fr.created_at, u.id AS requester_id, u.name, u.email
+     FROM friend_requests fr
+     JOIN users u ON u.id = fr.requester_id
+     WHERE fr.addressee_id = ? AND fr.status = 'pending'
+     ORDER BY fr.created_at DESC`,
+    [req.user.id]
+  );
+
+  return res.json({ incoming });
+});
+
+app.get("/api/friends/search", authMiddleware, async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q) return res.json({ users: [] });
+
+  const db = await getDb();
+  const users = await db.all(
+    `SELECT id, name, email
+     FROM users
+     WHERE id != ?
+       AND (LOWER(name) LIKE LOWER(?) OR LOWER(email) LIKE LOWER(?))
+     ORDER BY name
+     LIMIT 10`,
+    [req.user.id, `%${q}%`, `%${q}%`]
+  );
+
+  return res.json({ users });
+});
+
+app.post("/api/friends/request", authMiddleware, async (req, res) => {
+  const email = String(req.body.email || "").trim();
+  if (!email) return res.status(400).json({ message: "Email do amigo obrigatorio" });
+
+  const db = await getDb();
+  const target = await db.get("SELECT id, name, email FROM users WHERE LOWER(email) = LOWER(?)", [email]);
+  if (!target) return res.status(404).json({ message: "Usuario nao encontrado" });
+  if (target.id === req.user.id) return res.status(400).json({ message: "Nao e possivel adicionar a si mesmo" });
+
+  const existing = await db.get(
+    `SELECT id, requester_id, addressee_id, status
+     FROM friend_requests
+     WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)`,
+    [req.user.id, target.id, target.id, req.user.id]
+  );
+
+  if (existing?.status === "accepted") {
+    return res.status(409).json({ message: "Esse usuario ja e seu amigo" });
+  }
+
+  if (existing?.status === "pending" && existing.requester_id === target.id) {
+    await db.run("UPDATE friend_requests SET status = 'accepted' WHERE id = ?", [existing.id]);
+    return res.json({ message: "Pedido aceito automaticamente. Agora voces sao amigos" });
+  }
+
+  if (existing?.status === "pending") {
+    return res.status(409).json({ message: "Pedido de amizade ja enviado" });
+  }
+
+  if (existing?.status === "rejected") {
+    await db.run(
+      "UPDATE friend_requests SET requester_id = ?, addressee_id = ?, status = 'pending', created_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [req.user.id, target.id, existing.id]
+    );
+    return res.status(201).json({ message: "Pedido reenviado" });
+  }
+
+  await db.run(
+    "INSERT INTO friend_requests (requester_id, addressee_id, status) VALUES (?, ?, 'pending')",
+    [req.user.id, target.id]
+  );
+
+  return res.status(201).json({ message: "Pedido de amizade enviado" });
+});
+
+app.post("/api/friends/requests/:id/accept", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const requestRow = await db.get(
+    "SELECT * FROM friend_requests WHERE id = ? AND addressee_id = ? AND status = 'pending'",
+    [req.params.id, req.user.id]
+  );
+
+  if (!requestRow) return res.status(404).json({ message: "Pedido nao encontrado" });
+
+  await db.run("UPDATE friend_requests SET status = 'accepted' WHERE id = ?", [req.params.id]);
+  return res.json({ message: "Pedido aceito" });
+});
+
+app.post("/api/friends/requests/:id/reject", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const requestRow = await db.get(
+    "SELECT * FROM friend_requests WHERE id = ? AND addressee_id = ? AND status = 'pending'",
+    [req.params.id, req.user.id]
+  );
+
+  if (!requestRow) return res.status(404).json({ message: "Pedido nao encontrado" });
+
+  await db.run("UPDATE friend_requests SET status = 'rejected' WHERE id = ?", [req.params.id]);
+  return res.json({ message: "Pedido recusado" });
 });
 
 app.get("/api/tags", authMiddleware, async (req, res) => {
@@ -155,8 +304,15 @@ app.delete("/api/tags/:id", authMiddleware, async (req, res) => {
 });
 
 app.get("/api/dreams", authMiddleware, async (req, res) => {
-  const { date, month } = req.query;
+  const { date, month, userId } = req.query;
   const db = await getDb();
+
+  let ownerId;
+  try {
+    ownerId = await resolveViewerTargetUserId(db, req.user.id, userId);
+  } catch (err) {
+    return res.status(403).json({ message: err.message });
+  }
 
   let dreams = [];
   if (date) {
@@ -169,7 +325,7 @@ app.get("/api/dreams", authMiddleware, async (req, res) => {
        WHERE d.user_id = ? AND d.date = ?
        GROUP BY d.id
        ORDER BY d.created_at DESC`,
-      [req.user.id, date]
+      [ownerId, date]
     );
   } else if (month) {
     dreams = await db.all(
@@ -177,16 +333,16 @@ app.get("/api/dreams", authMiddleware, async (req, res) => {
        FROM dreams d
        WHERE d.user_id = ? AND substr(d.date, 1, 7) = ?
        ORDER BY d.date DESC`,
-      [req.user.id, month]
+      [ownerId, month]
     );
   } else {
     dreams = await db.all(
       "SELECT * FROM dreams WHERE user_id = ? ORDER BY date DESC LIMIT 100",
-      [req.user.id]
+      [ownerId]
     );
   }
 
-  return res.json({ dreams });
+  return res.json({ dreams, ownerId });
 });
 
 app.post("/api/dreams", authMiddleware, async (req, res) => {
@@ -216,14 +372,22 @@ app.post("/api/dreams", authMiddleware, async (req, res) => {
 });
 
 app.get("/api/stats", authMiddleware, async (req, res) => {
+  const { userId } = req.query;
   const db = await getDb();
+
+  let ownerId;
+  try {
+    ownerId = await resolveViewerTargetUserId(db, req.user.id, userId);
+  } catch (err) {
+    return res.status(403).json({ message: err.message });
+  }
 
   const totals = await db.get(
     `SELECT
       COUNT(*) AS totalDreams,
       SUM(CASE WHEN is_important = 1 THEN 1 ELSE 0 END) AS importantDreams
      FROM dreams WHERE user_id = ?`,
-    [req.user.id]
+    [ownerId]
   );
 
   const byMood = await db.all(
@@ -232,7 +396,7 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
      WHERE user_id = ?
      GROUP BY mood
      ORDER BY count DESC`,
-    [req.user.id]
+    [ownerId]
   );
 
   const topTags = await db.all(
@@ -244,7 +408,7 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
      GROUP BY t.id
      ORDER BY count DESC
      LIMIT 5`,
-    [req.user.id]
+    [ownerId]
   );
 
   const byMonth = await db.all(
@@ -254,10 +418,10 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
      GROUP BY month
      ORDER BY month DESC
      LIMIT 6`,
-    [req.user.id]
+    [ownerId]
   );
 
-  return res.json({ totals, byMood, topTags, byMonth });
+  return res.json({ totals, byMood, topTags, byMonth, ownerId });
 });
 
 app.get("*", (req, res) => {

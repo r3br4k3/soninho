@@ -1,11 +1,28 @@
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function localDateISO(dateObj = new Date()) {
+  return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth() + 1)}-${pad2(dateObj.getDate())}`;
+}
+
+function localMonthKey(dateObj = new Date()) {
+  return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth() + 1)}`;
+}
+
+const todayLocal = localDateISO();
+
 const state = {
   token: localStorage.getItem('soninhos_token') || '',
   user: JSON.parse(localStorage.getItem('soninhos_user') || 'null'),
   deviceId: '',
-  currentDate: new Date().toISOString().slice(0, 10),
-  selectedCalendarDate: new Date().toISOString().slice(0, 10),
-  calendarMonth: new Date().toISOString().slice(0, 7),
-  tags: []
+  currentDate: todayLocal,
+  selectedCalendarDate: todayLocal,
+  calendarMonth: todayLocal.slice(0, 7),
+  tags: [],
+  friends: [],
+  incomingRequests: [],
+  selectedOwnerId: 'me'
 };
 
 const authView = document.getElementById('authView');
@@ -37,6 +54,13 @@ const reminderForm = document.getElementById('reminderForm');
 const reminderTime = document.getElementById('reminderTime');
 const reminderMessage = document.getElementById('reminderMessage');
 const testReminderBtn = document.getElementById('testReminderBtn');
+const journalOwnerSelect = document.getElementById('journalOwnerSelect');
+const friendSearchForm = document.getElementById('friendSearchForm');
+const friendQuery = document.getElementById('friendQuery');
+const friendSearchResults = document.getElementById('friendSearchResults');
+const incomingRequests = document.getElementById('incomingRequests');
+const friendsList = document.getElementById('friendsList');
+const friendMessage = document.getElementById('friendMessage');
 
 async function hashText(text) {
   const data = new TextEncoder().encode(text);
@@ -64,6 +88,32 @@ function showAuthMessage(text, isError = false) {
 function showMessage(el, text, isError = false) {
   el.textContent = text;
   el.style.color = isError ? '#b74242' : '#7f6edc';
+}
+
+function selectedOwnerQueryPart() {
+  if (state.selectedOwnerId === 'me') return '';
+  return `&userId=${encodeURIComponent(state.selectedOwnerId)}`;
+}
+
+function selectedOwnerLabel() {
+  if (state.selectedOwnerId === 'me') return 'seu diario';
+  const friend = state.friends.find((item) => String(item.id) === String(state.selectedOwnerId));
+  if (!friend) return 'diario compartilhado';
+  return `diario de ${friend.name}`;
+}
+
+function updateJournalComposeState() {
+  const editable = state.selectedOwnerId === 'me';
+  const controls = dreamForm.querySelectorAll('textarea, select, input[type="checkbox"], button[type="submit"]');
+  controls.forEach((control) => {
+    control.disabled = !editable;
+  });
+
+  if (!editable) {
+    showMessage(dreamMessage, `Visualizando ${selectedOwnerLabel()}. Para escrever, selecione Meu diario.`);
+  } else if (dreamMessage.textContent.includes('Visualizando')) {
+    dreamMessage.textContent = '';
+  }
 }
 
 async function api(path, options = {}) {
@@ -119,6 +169,162 @@ async function fetchTags() {
   state.tags = data.tags;
   renderTags();
   renderTagChecklist();
+}
+
+function renderOwnerSelect() {
+  journalOwnerSelect.innerHTML = '';
+
+  const own = document.createElement('option');
+  own.value = 'me';
+  own.textContent = 'Meu diario';
+  journalOwnerSelect.appendChild(own);
+
+  state.friends.forEach((friend) => {
+    const option = document.createElement('option');
+    option.value = String(friend.id);
+    option.textContent = `Diario de ${friend.name}`;
+    journalOwnerSelect.appendChild(option);
+  });
+
+  if (!Array.from(journalOwnerSelect.options).some((opt) => opt.value === String(state.selectedOwnerId))) {
+    state.selectedOwnerId = 'me';
+  }
+  journalOwnerSelect.value = String(state.selectedOwnerId);
+  updateJournalComposeState();
+}
+
+function renderIncomingRequests() {
+  incomingRequests.innerHTML = '';
+  if (!state.incomingRequests.length) {
+    incomingRequests.innerHTML = '<p>Sem pedidos pendentes.</p>';
+    return;
+  }
+
+  state.incomingRequests.forEach((requestItem) => {
+    const row = document.createElement('article');
+    row.className = 'friend-item';
+    row.innerHTML = `<p><strong>${requestItem.name}</strong><br /><small>${requestItem.email}</small></p>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'friend-actions';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.type = 'button';
+    acceptBtn.className = 'btn-primary';
+    acceptBtn.textContent = 'Aceitar';
+    acceptBtn.addEventListener('click', async () => {
+      try {
+        await api(`/api/friends/requests/${requestItem.id}/accept`, { method: 'POST' });
+        showMessage(friendMessage, `Voce agora e amigo de ${requestItem.name}.`);
+        await loadFriendsData();
+      } catch (err) {
+        showMessage(friendMessage, err.message, true);
+      }
+    });
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.type = 'button';
+    rejectBtn.className = 'btn-ghost';
+    rejectBtn.textContent = 'Recusar';
+    rejectBtn.addEventListener('click', async () => {
+      try {
+        await api(`/api/friends/requests/${requestItem.id}/reject`, { method: 'POST' });
+        showMessage(friendMessage, 'Pedido recusado.');
+        await loadFriendsData();
+      } catch (err) {
+        showMessage(friendMessage, err.message, true);
+      }
+    });
+
+    actions.appendChild(acceptBtn);
+    actions.appendChild(rejectBtn);
+    row.appendChild(actions);
+    incomingRequests.appendChild(row);
+  });
+}
+
+function renderFriendsList() {
+  friendsList.innerHTML = '';
+  if (!state.friends.length) {
+    friendsList.innerHTML = '<p>Voce ainda nao tem amigos adicionados.</p>';
+    return;
+  }
+
+  state.friends.forEach((friend) => {
+    const row = document.createElement('article');
+    row.className = 'friend-item';
+    row.innerHTML = `<p><strong>${friend.name}</strong><br /><small>${friend.email}</small></p>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'friend-actions';
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-ghost';
+    viewBtn.textContent = 'Ver diario';
+    viewBtn.addEventListener('click', async () => {
+      state.selectedOwnerId = String(friend.id);
+      renderOwnerSelect();
+      await loadDreamsForDate(state.selectedCalendarDate);
+      state.calendarMonth = state.selectedCalendarDate.slice(0, 7);
+      await renderCalendar();
+      await loadStats();
+      activateTab('journal');
+    });
+
+    actions.appendChild(viewBtn);
+    row.appendChild(actions);
+    friendsList.appendChild(row);
+  });
+}
+
+function renderFriendSearchResults(users) {
+  friendSearchResults.innerHTML = '';
+  if (!users.length) {
+    friendSearchResults.innerHTML = '<p>Nenhum usuario encontrado.</p>';
+    return;
+  }
+
+  users.forEach((person) => {
+    const row = document.createElement('article');
+    row.className = 'friend-item';
+    row.innerHTML = `<p><strong>${person.name}</strong><br /><small>${person.email}</small></p>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'friend-actions';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn-primary';
+    addBtn.textContent = 'Adicionar';
+    addBtn.addEventListener('click', async () => {
+      try {
+        const result = await api('/api/friends/request', {
+          method: 'POST',
+          body: JSON.stringify({ email: person.email })
+        });
+        showMessage(friendMessage, result.message || 'Pedido enviado.');
+        await loadFriendsData();
+      } catch (err) {
+        showMessage(friendMessage, err.message, true);
+      }
+    });
+
+    actions.appendChild(addBtn);
+    row.appendChild(actions);
+    friendSearchResults.appendChild(row);
+  });
+}
+
+async function loadFriendsData() {
+  const [friendsData, requestsData] = await Promise.all([
+    api('/api/friends'),
+    api('/api/friends/requests')
+  ]);
+
+  state.friends = friendsData.friends || [];
+  state.incomingRequests = requestsData.incoming || [];
+  renderOwnerSelect();
+  renderIncomingRequests();
+  renderFriendsList();
 }
 
 function renderTags() {
@@ -208,11 +414,11 @@ function buildAutoDreamTitle(date, mood) {
 async function loadDreamsForDate(date) {
   state.selectedCalendarDate = date;
   dreamDate.value = date;
-  const data = await api(`/api/dreams?date=${date}`);
+  const data = await api(`/api/dreams?date=${date}${selectedOwnerQueryPart()}`);
 
   dreamList.innerHTML = '';
   if (!data.dreams.length) {
-    dreamList.innerHTML = '<p>Nenhum sonho registrado nesta data.</p>';
+    dreamList.innerHTML = `<p>Nenhum sonho registrado nesta data em ${selectedOwnerLabel()}.</p>`;
     return;
   }
 
@@ -259,15 +465,15 @@ async function renderCalendar() {
     cells.push({ date, inactive: true });
   }
 
-  const monthData = await api(`/api/dreams?month=${state.calendarMonth}`);
+  const monthData = await api(`/api/dreams?month=${state.calendarMonth}${selectedOwnerQueryPart()}`);
   const dreamDaySet = new Set(monthData.dreams.map((d) => d.date));
 
   calendarTitle.textContent = formatMonthTitle(state.calendarMonth);
   calendarGrid.innerHTML = '';
 
   cells.forEach(({ date, inactive }) => {
-    const dateStr = date.toISOString().slice(0, 10);
-    const isToday = dateStr === new Date().toISOString().slice(0, 10);
+    const dateStr = localDateISO(date);
+    const isToday = dateStr === localDateISO();
     const isSelected = dateStr === state.selectedCalendarDate;
 
     const el = document.createElement('button');
@@ -287,7 +493,8 @@ async function renderCalendar() {
 }
 
 async function loadStats() {
-  const stats = await api('/api/stats');
+  const query = state.selectedOwnerId === 'me' ? '' : `?userId=${encodeURIComponent(state.selectedOwnerId)}`;
+  const stats = await api(`/api/stats${query}`);
   totalDreams.textContent = String(stats.totals.totalDreams || 0);
   importantDreams.textContent = String(stats.totals.importantDreams || 0);
 
@@ -327,6 +534,7 @@ function activateTab(tabName) {
 
 async function bootstrapAppData() {
   try {
+    await loadFriendsData();
     await fetchTags();
     await loadDreamsForDate(state.currentDate);
     await renderCalendar();
@@ -450,9 +658,22 @@ function attachEvents() {
     await renderCalendar();
   });
 
+  journalOwnerSelect.addEventListener('change', async () => {
+    state.selectedOwnerId = journalOwnerSelect.value;
+    updateJournalComposeState();
+    await loadDreamsForDate(state.selectedCalendarDate);
+    await renderCalendar();
+    await loadStats();
+  });
+
   dreamForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
+      if (state.selectedOwnerId !== 'me') {
+        showMessage(dreamMessage, 'Voce esta vendo o diario de um amigo. Troque para Meu diario para criar registros.', true);
+        return;
+      }
+
       const mood = document.getElementById('dreamMood').value;
       const payload = {
         title: buildAutoDreamTitle(dreamDate.value, mood),
@@ -501,15 +722,27 @@ function attachEvents() {
   prevMonth.addEventListener('click', async () => {
     const [y, m] = state.calendarMonth.split('-').map(Number);
     const d = new Date(y, m - 2, 1);
-    state.calendarMonth = d.toISOString().slice(0, 7);
+    state.calendarMonth = localMonthKey(d);
     await renderCalendar();
   });
 
   nextMonth.addEventListener('click', async () => {
     const [y, m] = state.calendarMonth.split('-').map(Number);
     const d = new Date(y, m, 1);
-    state.calendarMonth = d.toISOString().slice(0, 7);
+    state.calendarMonth = localMonthKey(d);
     await renderCalendar();
+  });
+
+  friendSearchForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const query = friendQuery.value.trim();
+      if (!query) return;
+      const result = await api(`/api/friends/search?q=${encodeURIComponent(query)}`);
+      renderFriendSearchResults(result.users || []);
+    } catch (err) {
+      showMessage(friendMessage, err.message, true);
+    }
   });
 
   document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -518,6 +751,9 @@ function attachEvents() {
       activateTab(tab);
       if (tab === 'stats') await loadStats();
       if (tab === 'calendar') await renderCalendar();
+      if (tab === 'friends') {
+        await loadFriendsData();
+      }
     });
   });
 
