@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#5d4ca8" />
+    <title>SONINHOS</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="stars-layer stars-back"></div>
+    <div class="stars-layer stars-front"></div>
+    <div class="sparkles-layer" aria-hidden="true">
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+    </div>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <div id="authView" class="auth-shell">
+      <div class="brand-panel">
+        <p class="eyebrow">monitoramento de sonhos</p>
+        <h1>SONINHOS</h1>
+        <p class="subtitle">Seu diario inteligente para registrar sonhos, encontrar padroes e destacar dias importantes.</p>
+      </div>
+
+      <div class="card auth-card">
+        <div class="auth-tabs">
+          <button id="tabLogin" class="active">Entrar</button>
+          <button id="tabRegister">Criar conta</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>Email</label>
+          <input type="email" id="loginEmail" required />
+          <label>Senha</label>
+          <input type="password" id="loginPassword" required />
+          <button type="submit" class="btn-primary">Entrar</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <label>Nome</label>
+          <input type="text" id="registerName" required />
+          <label>Email</label>
+          <input type="email" id="registerEmail" required />
+          <label>Senha</label>
+          <input type="password" id="registerPassword" minlength="6" required />
+          <button type="submit" class="btn-primary">Criar conta</button>
+        </form>
+
+        <p id="authMessage" class="message"></p>
+      </div>
+    </div>
+
+    <div id="appView" class="app-shell hidden">
+      <header class="topbar card">
+        <div>
+          <p class="eyebrow">bem-vindo(a)</p>
+          <h2 id="welcomeName">SONHADOR(A)</h2>
+        </div>
+        <button id="logoutBtn" class="btn-ghost">Sair</button>
+      </header>
+
+      <main class="content">
+        <section id="tab-journal" class="tab-panel active">
+          <div class="card panel-head">
+            <h3>Diario dos Sonhos</h3>
+            <input type="date" id="dreamDate" />
+          </div>
+
+          <div class="card">
+            <form id="dreamForm" class="dream-form">
+              <label>Como foi?</label>
+              <textarea id="dreamContent" rows="5" required></textarea>
+
+              <label>Humor ao acordar</label>
+              <select id="dreamMood">
+                <option value="">Selecione</option>
+                <option value="feliz">Feliz</option>
+                <option value="ansioso">Ansioso</option>
+                <option value="calmo">Calmo</option>
+                <option value="confuso">Confuso</option>
+                <option value="medo">Medo</option>
+              </select>
+
+              <div>
+                <p class="small-title">Tags do sonho</p>
+                <div id="dreamTagChecklist" class="tag-checklist"></div>
+              </div>
+
+              <label class="toggle-line">
+                <input type="checkbox" id="isImportant" />
+                Marcar como sonho importante
+              </label>
+
+              <button type="submit" class="btn-primary">Salvar sonho</button>
+            </form>
+            <p id="dreamMessage" class="message"></p>
+          </div>
+
+          <div class="card">
+            <h4>Registros do dia</h4>
+            <div id="dreamList" class="dream-list"></div>
+          </div>
+        </section>
+
+        <section id="tab-calendar" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Calendario de Sonhos</h3>
+            <div class="calendar-nav">
+              <button id="prevMonth" class="btn-ghost">Mes anterior</button>
+              <strong id="calendarTitle"></strong>
+              <button id="nextMonth" class="btn-ghost">Proximo mes</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+        </section>
+
+        <section id="tab-tags" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Gerenciador de Tags</h3>
+          </div>
+          <div class="card">
+            <form id="tagForm" class="inline-form">
+              <input type="text" id="tagName" placeholder="Nome da tag" required />
+              <input type="color" id="tagColor" value="#7f6edc" />
+              <button type="submit" class="btn-primary">Criar</button>
+            </form>
+            <div id="tagList" class="tag-list"></div>
+            <p id="tagMessage" class="message"></p>
+          </div>
+        </section>
+
+        <section id="tab-stats" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Estatisticas</h3>
+          </div>
+          <div class="stats-grid">
+            <article class="card stat-card">
+              <p>Total de sonhos</p>
+              <strong id="totalDreams">0</strong>
+            </article>
+            <article class="card stat-card">
+              <p>Sonhos importantes</p>
+              <strong id="importantDreams">0</strong>
+            </article>
+          </div>
+          <div class="card">
+            <h4>Top Tags</h4>
+            <ul id="topTags"></ul>
+          </div>
+          <div class="card">
+            <h4>Sonhos por mes</h4>
+            <div id="monthBars" class="bars"></div>
+          </div>
+        </section>
+
+        <section id="tab-reminders" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Lembretes</h3>
+          </div>
+          <div class="card">
+            <p>Ative notificacoes para lembrar de registrar o sonho ao acordar.</p>
+            <form id="reminderForm" class="inline-form">
+              <input type="time" id="reminderTime" required />
+              <button type="submit" class="btn-primary">Ativar lembrete diario</button>
+            </form>
+            <button id="testReminderBtn" class="btn-ghost">Testar notificacao</button>
+            <p id="reminderMessage" class="message"></p>
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav card">
+        <button class="nav-btn active" data-tab="journal" title="Diario">📝<span>Diario</span></button>
+        <button class="nav-btn" data-tab="calendar" title="Calendario">🗓️<span>Calendario</span></button>
+        <button class="nav-btn" data-tab="tags" title="Tags">🏷️<span>Tags</span></button>
+        <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
+        <button class="nav-btn" data-tab="reminders" title="Lembretes">⏰<span>Lembretes</span></button>
+      </nav>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
