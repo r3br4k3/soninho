@@ -356,6 +356,21 @@ function millisUntilNextTime(time) {
   return next.getTime() - now.getTime();
 }
 
+async function showReminderNotification(body) {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('Service Worker nao suportado neste dispositivo.');
+  }
+
+  const reg = await navigator.serviceWorker.ready;
+  await reg.showNotification('SONINHOS', {
+    body,
+    tag: 'daily-dream-reminder',
+    renotify: true,
+    badge: '/icone.ico',
+    icon: '/icone.ico'
+  });
+}
+
 function startReminderLoop() {
   const cfg = getReminderStorage();
   if (!cfg?.time) return;
@@ -363,12 +378,7 @@ function startReminderLoop() {
   const timeout = millisUntilNextTime(cfg.time);
   setTimeout(async () => {
     if (Notification.permission === 'granted') {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg?.active) {
-        reg.active.postMessage({ type: 'SHOW_REMINDER' });
-      } else {
-        new Notification('SONINHOS', { body: 'Registre seu sonho antes de esquecer.' });
-      }
+      await showReminderNotification('Registre seu sonho antes de esquecer.');
     }
     startReminderLoop();
   }, timeout);
@@ -525,7 +535,7 @@ function attachEvents() {
   testReminderBtn.addEventListener('click', async () => {
     try {
       await ensureNotificationPermission();
-      new Notification('SONINHOS', { body: 'Teste de notificacao funcionando.' });
+      await showReminderNotification('Teste de notificacao funcionando.');
       showMessage(reminderMessage, 'Teste enviado.');
     } catch (err) {
       showMessage(reminderMessage, err.message, true);

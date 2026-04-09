@@ -3,7 +3,14 @@
   "short_name": "SONINHOS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f6f4ef",
-  "theme_color": "#1b2f2a",
-  "description": "Diario e monitoramento de sonhos com tags, calendario e estatisticas"
+  "background_color": "#a18dd6",
+  "theme_color": "#5d4ca8",
+  "description": "Diario e monitoramento de sonhos com tags, calendario e estatisticas",
+  "icons": [
+    {
+      "src": "/icone.ico",
+      "sizes": "16x16 24x24 32x32 48x48 64x64",
+      "type": "image/x-icon"
+    }
+  ]
 }
