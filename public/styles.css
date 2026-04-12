@@ -25,12 +25,16 @@ body {
     radial-gradient(circle at 15% 12%, rgba(255, 240, 255, 0.58), transparent 34%),
     radial-gradient(circle at 86% 2%, rgba(232, 221, 255, 0.52), transparent 35%),
     radial-gradient(circle at 50% 80%, rgba(241, 236, 255, 0.42), transparent 42%),
-    url("https://cdn.discordapp.com/attachments/1385410398269739166/1491591621773492314/bc5890e8-c3ac-4ff3-8395-b075e18fa572.png?ex=69d84073&is=69d6eef3&hm=44a80104cefa0c6a1dea279dd7df23f6c15e8c9010724ed0d6b8248c4aa25ab5&");
+    var(--user-wallpaper, url("https://cdn.discordapp.com/attachments/1385410398269739166/1491591621773492314/bc5890e8-c3ac-4ff3-8395-b075e18fa572.png?ex=69d84073&is=69d6eef3&hm=44a80104cefa0c6a1dea279dd7df23f6c15e8c9010724ed0d6b8248c4aa25ab5&"));
   background-size: cover, auto, auto, auto, cover;
   background-position: center, center, center, center, center;
   background-attachment: fixed, fixed, fixed, fixed, fixed;
   min-height: 100vh;
   overflow-y: auto;
+}
+
+body.has-custom-wallpaper {
+  background-size: cover, auto, auto, auto, cover;
 }
 
 .stars-layer {
@@ -520,6 +524,14 @@ textarea::placeholder {
   font-size: 0.78rem;
 }
 
+.tag-effect-select {
+  min-width: 130px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid #c7b7f1;
+  background: #f0e8ff;
+}
+
 .tag-chip button {
   border: none;
   background: transparent;
@@ -544,6 +556,17 @@ textarea::placeholder {
   border-radius: 12px;
   padding: 10px;
   background: #fdfbff;
+}
+
+.dream-content {
+  margin: 8px 0;
+}
+
+.dream-tags-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .inline-form {
@@ -741,11 +764,13 @@ textarea::placeholder {
   border: none;
   background: transparent;
   border-radius: 12px;
-  padding: 8px 4px;
+  padding: 10px 6px;
   display: grid;
-  gap: 2px;
+  gap: 4px;
   justify-items: center;
   cursor: pointer;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 .nav-btn.active {
@@ -753,7 +778,7 @@ textarea::placeholder {
 }
 
 .nav-btn span {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
 }
 
 @media (max-width: 900px) {
@@ -786,6 +811,29 @@ textarea::placeholder {
     padding-bottom: 110px;
     overscroll-behavior: contain;
   }
+
+  .bottom-nav {
+    left: 8px;
+    transform: none;
+    width: calc(100vw - 16px);
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    padding: 10px;
+  }
+
+  .bottom-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    min-width: 92px;
+    scroll-snap-align: start;
+    font-size: 1.6rem;
+  }
 }
 
 /* ─── SALDO DE SONINHOS ──────────────────────────────────────────────────── */
@@ -815,6 +863,114 @@ textarea::placeholder {
   gap: 8px;
   padding: 4px 0 8px;
   flex-wrap: wrap;
+}
+
+.shop-wallpaper-card {
+  margin: 8px 0 14px;
+  border: 1.5px solid #8b72cc;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shop-wallpaper-card h4 {
+  margin-bottom: 8px;
+  color: #f0e0ff;
+}
+
+.shop-wallpaper-help {
+  margin: 0 0 10px;
+  color: #cfb8ff;
+  font-size: 0.86rem;
+}
+
+.shop-wallpaper-form {
+  margin-bottom: 0;
+}
+
+.shop-wallpaper-form input {
+  flex: 1;
+  min-width: 240px;
+}
+
+.shop-wallpaper-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.shop-wallpaper-empty {
+  margin: 0;
+  color: #cfb8ff;
+  font-size: 0.84rem;
+}
+
+.shop-wallpaper-item {
+  border: 1px solid #8e77cc;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(20, 14, 44, 0.24);
+  display: grid;
+  gap: 8px;
+}
+
+.shop-wallpaper-item-active {
+  border-color: #7bc67e;
+  box-shadow: 0 0 10px rgba(123, 198, 126, 0.35);
+}
+
+.shop-wallpaper-preview {
+  width: 100%;
+  height: 110px;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #a48edd;
+}
+
+.shop-wallpaper-info {
+  display: grid;
+  gap: 2px;
+  color: #f0e0ff;
+}
+
+.shop-wallpaper-info small {
+  color: #d8c4ff;
+}
+
+.shop-admin-card {
+  margin: 8px 0 14px;
+  border: 1.5px solid #8b72cc;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shop-admin-card h4,
+.shop-admin-card h5 {
+  margin: 0 0 8px;
+  color: #f0e0ff;
+}
+
+.shop-admin-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.shop-admin-grid label {
+  color: #cfb8ff;
+  font-size: 0.82rem;
+}
+
+.shop-admin-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.shop-admin-state {
+  color: #d7c4ff;
+  font-size: 0.82rem;
 }
 
 .shop-cat-btn {
@@ -955,15 +1111,37 @@ body.font-courier #dreamContent {
   font-size: 0.95rem;
 }
 
+.dream-content.font-dancing {
+  font-family: 'Dancing Script', cursive;
+  font-size: 1.15rem;
+  line-height: 1.7;
+}
+
+.dream-content.font-orbitron {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.dream-content.font-playfair {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.02rem;
+  line-height: 1.75;
+}
+
+.dream-content.font-courier {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.97rem;
+}
+
 /* Preview da fonte nos cards da loja */
 .shop-item-preview.font-dancing  { font-family: 'Dancing Script', cursive; }
 .shop-item-preview.font-orbitron { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; }
 .shop-item-preview.font-playfair { font-family: 'Playfair Display', serif; font-style: italic; }
 .shop-item-preview.font-courier  { font-family: 'Courier Prime', monospace; }
 
-/* ─── EFEITOS DE TAGS (aplicados via classe no body) ─────────────────────── */
+/* ─── EFEITOS DE TAGS (aplicados por tag) ─────────────────────────────────── */
 
-body.tag-neon-pink .tag-chip,
 .tag-chip.tag-neon-pink {
   background: #ff2d78 !important;
   color: #fff !important;
@@ -972,7 +1150,6 @@ body.tag-neon-pink .tag-chip,
   text-shadow: 0 0 6px #fff;
 }
 
-body.tag-neon-blue .tag-chip,
 .tag-chip.tag-neon-blue {
   background: #00b4ff !important;
   color: #fff !important;
@@ -981,7 +1158,6 @@ body.tag-neon-blue .tag-chip,
   text-shadow: 0 0 6px #fff;
 }
 
-body.tag-neon-green .tag-chip,
 .tag-chip.tag-neon-green {
   background: #00e676 !important;
   color: #002b0f !important;
@@ -989,7 +1165,6 @@ body.tag-neon-green .tag-chip,
   box-shadow: 0 0 6px #00e676, 0 0 16px rgba(0, 230, 118, 0.5);
 }
 
-body.tag-gold .tag-chip,
 .tag-chip.tag-gold {
   background: linear-gradient(135deg, #f5c542, #e09800) !important;
   color: #3a2500 !important;
@@ -1007,7 +1182,6 @@ body.tag-gold .tag-chip,
   100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; }
 }
 
-body.tag-rgb .tag-chip,
 .tag-chip.tag-rgb {
   animation: rgbCycle 3s linear infinite !important;
   color: #fff !important;

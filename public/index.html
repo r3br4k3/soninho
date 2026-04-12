@@ -261,6 +261,52 @@
             <button class="shop-cat-btn active" data-cat="all">Tudo</button>
             <button class="shop-cat-btn" data-cat="font">Fontes</button>
             <button class="shop-cat-btn" data-cat="tag_effect">Efeitos de Tags</button>
+            <button class="shop-cat-btn" data-cat="wallpaper">Wallpapers</button>
+          </div>
+
+          <div id="shopWallpaperCard" class="card shop-wallpaper-card hidden">
+            <h4>Wallpaper Personalizado</h4>
+            <p class="shop-wallpaper-help">Use qualquer URL de imagem valida. Cada troca custa <strong>✨ 200 soninhos</strong>.</p>
+            <form id="customWallpaperForm" class="inline-form shop-wallpaper-form">
+              <input type="text" id="customWallpaperUrl" placeholder="https://site.com/imagem.jpg" required />
+              <button type="submit" class="btn-primary">Aplicar por 200</button>
+              <button type="button" id="removeCustomWallpaperBtn" class="btn-ghost">Remover wallpaper</button>
+            </form>
+            <p id="customWallpaperStatus" class="message"></p>
+            <div id="customWallpaperList" class="shop-wallpaper-list"></div>
+          </div>
+
+          <div id="shopAdminPanel" class="card shop-admin-card hidden">
+            <h4>Painel Admin</h4>
+            <p class="shop-wallpaper-help">Gerencie contas, soninhos e itens comprados.</p>
+
+            <div class="shop-admin-grid">
+              <label for="adminUserSelect">Conta</label>
+              <select id="adminUserSelect"></select>
+
+              <label for="adminCoinsAmount">Valor de soninhos</label>
+              <input type="number" id="adminCoinsAmount" min="1" value="100" />
+            </div>
+
+            <div class="shop-admin-actions">
+              <button type="button" id="adminAddCoinsBtn" class="btn-primary">Adicionar soninhos</button>
+              <button type="button" id="adminRemoveCoinsBtn" class="btn-ghost">Remover soninhos</button>
+            </div>
+
+            <div class="shop-admin-grid">
+              <label for="adminItemSelect">Item da loja</label>
+              <select id="adminItemSelect"></select>
+            </div>
+
+            <div class="shop-admin-actions">
+              <button type="button" id="adminTogglePurchaseBtn" class="btn-primary">Alternar comprado</button>
+              <span id="adminPurchaseState" class="shop-admin-state"></span>
+            </div>
+
+            <p id="adminStatus" class="message"></p>
+
+            <h5>Contas registradas</h5>
+            <div id="adminAccountsList" class="friend-list"></div>
           </div>
 
           <div id="shopGrid" class="shop-grid"></div>

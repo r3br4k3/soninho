@@ -28,8 +28,12 @@ const state = {
   friendLocationPollId: null,
   soninhos: 0,
   shopItems: [],
-  equipped: { active_font: null, active_tag_effect: null },
+  customWallpapers: [],
+  equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null },
   shopFilter: 'all',
+  adminUnlocked: false,
+  adminUsers: [],
+  adminShopItems: [],
 };
 
 const authView = document.getElementById('authView');
@@ -78,6 +82,181 @@ const soninhosBalance = document.getElementById('soninhosBalance');
 const shopGrid = document.getElementById('shopGrid');
 const shopMessage = document.getElementById('shopMessage');
 const shopBalanceDisplay = document.getElementById('shopBalanceDisplay');
+const shopWallpaperCard = document.getElementById('shopWallpaperCard');
+const customWallpaperForm = document.getElementById('customWallpaperForm');
+const customWallpaperUrl = document.getElementById('customWallpaperUrl');
+const customWallpaperStatus = document.getElementById('customWallpaperStatus');
+const removeCustomWallpaperBtn = document.getElementById('removeCustomWallpaperBtn');
+const customWallpaperList = document.getElementById('customWallpaperList');
+const shopAdminPanel = document.getElementById('shopAdminPanel');
+const adminUserSelect = document.getElementById('adminUserSelect');
+const adminCoinsAmount = document.getElementById('adminCoinsAmount');
+const adminAddCoinsBtn = document.getElementById('adminAddCoinsBtn');
+const adminRemoveCoinsBtn = document.getElementById('adminRemoveCoinsBtn');
+const adminItemSelect = document.getElementById('adminItemSelect');
+const adminTogglePurchaseBtn = document.getElementById('adminTogglePurchaseBtn');
+const adminPurchaseState = document.getElementById('adminPurchaseState');
+const adminStatus = document.getElementById('adminStatus');
+const adminAccountsList = document.getElementById('adminAccountsList');
+
+const ADMIN_TRIGGER_KEY = 'william';
+
+function adminApi(path, options = {}) {
+  return api(path, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'x-admin-key': ADMIN_TRIGGER_KEY,
+    },
+  });
+}
+
+function getAdminSelectedUser() {
+  const selectedId = Number(adminUserSelect?.value || 0);
+  return state.adminUsers.find((user) => user.id === selectedId) || null;
+}
+
+function getAdminSelectedItem() {
+  const selectedItemId = String(adminItemSelect?.value || '');
+  return state.adminShopItems.find((item) => item.id === selectedItemId) || null;
+}
+
+function renderAdminAccountsList() {
+  if (!adminAccountsList) return;
+  adminAccountsList.innerHTML = '';
+
+  if (!state.adminUsers.length) {
+    adminAccountsList.innerHTML = '<p>Nenhuma conta registrada.</p>';
+    return;
+  }
+
+  state.adminUsers.forEach((user) => {
+    const row = document.createElement('article');
+    row.className = 'friend-item';
+    row.innerHTML = `
+      <p>
+        <strong>${escapeHtml(user.name)}</strong><br />
+        <small>${escapeHtml(user.email)}</small><br />
+        <small>ID: ${user.id} | Saldo: ✨ ${user.soninhos_balance}</small>
+      </p>
+    `;
+    adminAccountsList.appendChild(row);
+  });
+}
+
+function renderAdminSelectors() {
+  if (!adminUserSelect || !adminItemSelect) return;
+
+  const currentUserValue = adminUserSelect.value;
+  adminUserSelect.innerHTML = '';
+  state.adminUsers.forEach((user) => {
+    const option = document.createElement('option');
+    option.value = String(user.id);
+    option.textContent = `${user.name} (#${user.id})`;
+    adminUserSelect.appendChild(option);
+  });
+  if (currentUserValue && Array.from(adminUserSelect.options).some((o) => o.value === currentUserValue)) {
+    adminUserSelect.value = currentUserValue;
+  }
+
+  const currentItemValue = adminItemSelect.value;
+  adminItemSelect.innerHTML = '';
+  state.adminShopItems.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = `${item.name} (${item.category})`;
+    adminItemSelect.appendChild(option);
+  });
+  if (currentItemValue && Array.from(adminItemSelect.options).some((o) => o.value === currentItemValue)) {
+    adminItemSelect.value = currentItemValue;
+  }
+}
+
+function updateAdminPurchaseState() {
+  if (!adminPurchaseState || !adminTogglePurchaseBtn) return;
+  const user = getAdminSelectedUser();
+  const item = getAdminSelectedItem();
+  if (!user || !item) {
+    adminPurchaseState.textContent = 'Selecione conta e item.';
+    return;
+  }
+
+  const owned = Array.isArray(user.purchases) && user.purchases.includes(item.id);
+  adminPurchaseState.textContent = owned ? 'Status atual: Comprado' : 'Status atual: Nao comprado';
+  adminTogglePurchaseBtn.textContent = owned ? 'Marcar como nao comprado' : 'Marcar como comprado';
+}
+
+async function loadAdminData() {
+  const [usersData, itemsData] = await Promise.all([
+    adminApi('/api/admin/users'),
+    adminApi('/api/admin/shop/items'),
+  ]);
+
+  state.adminUsers = usersData.users || [];
+  state.adminShopItems = itemsData.items || [];
+  renderAdminSelectors();
+  renderAdminAccountsList();
+  updateAdminPurchaseState();
+}
+
+async function unlockAdminPanel() {
+  if (!shopAdminPanel) return;
+  state.adminUnlocked = true;
+  shopAdminPanel.classList.remove('hidden');
+  await loadAdminData();
+  showMessage(customWallpaperStatus, 'Painel admin liberado.');
+}
+
+async function adjustSelectedUserBalance(signal) {
+  const user = getAdminSelectedUser();
+  if (!user) {
+    showMessage(adminStatus, 'Selecione uma conta.', true);
+    return;
+  }
+
+  const amount = Number(adminCoinsAmount?.value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showMessage(adminStatus, 'Informe um valor valido.', true);
+    return;
+  }
+
+  const delta = signal > 0 ? amount : -amount;
+  try {
+    const result = await adminApi(`/api/admin/users/${encodeURIComponent(user.id)}/coins`, {
+      method: 'POST',
+      body: JSON.stringify({ delta }),
+    });
+    showMessage(adminStatus, `Saldo atualizado para ✨ ${result.user.soninhos_balance}.`);
+    await loadAdminData();
+    await loadShopData();
+  } catch (err) {
+    showMessage(adminStatus, err.message, true);
+  }
+}
+
+async function toggleSelectedUserPurchase() {
+  const user = getAdminSelectedUser();
+  const item = getAdminSelectedItem();
+  if (!user || !item) {
+    showMessage(adminStatus, 'Selecione conta e item.', true);
+    return;
+  }
+
+  const currentlyOwned = Array.isArray(user.purchases) && user.purchases.includes(item.id);
+
+  try {
+    const result = await adminApi(`/api/admin/users/${encodeURIComponent(user.id)}/purchases/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ itemId: item.id, owned: !currentlyOwned }),
+    });
+    const statusText = result.owned ? 'comprado' : 'nao comprado';
+    showMessage(adminStatus, `Item ${item.name} marcado como ${statusText} para ${user.name}.`);
+    await loadAdminData();
+    await loadShopData();
+  } catch (err) {
+    showMessage(adminStatus, err.message, true);
+  }
+}
 
 async function hashText(text) {
   const data = new TextEncoder().encode(text);
@@ -435,6 +614,8 @@ function logout() {
 
   state.user = null;
   state.token = '';
+  state.equipped = { active_font: null, active_tag_effect: null, active_wallpaper: null };
+  applyWallpaper(null);
   localStorage.removeItem('soninhos_user');
   localStorage.removeItem('soninhos_token');
   authView.classList.remove('hidden');
@@ -446,6 +627,30 @@ async function fetchTags() {
   state.tags = data.tags;
   renderTags();
   renderTagChecklist();
+}
+
+function getOwnedTagEffectItems() {
+  return state.shopItems.filter((item) => item.category === 'tag_effect' && item.owned);
+}
+
+function getEquippedFontEffectClass() {
+  const fontItem = state.shopItems.find((item) => item.id === state.equipped.active_font);
+  return fontItem?.effect_class || null;
+}
+
+function parseDreamTagDetails(rawDetails) {
+  if (!rawDetails) return [];
+  return String(rawDetails)
+    .split('||')
+    .map((entry) => {
+      const [name, color, effectClass] = entry.split('::');
+      return {
+        name: name || '',
+        color: color || '#7f6edc',
+        effectClass: effectClass || '',
+      };
+    })
+    .filter((tag) => tag.name);
 }
 
 function renderOwnerSelect() {
@@ -619,7 +824,7 @@ function renderTags() {
 
   state.tags.forEach((tag) => {
     const chip = document.createElement('div');
-    chip.className = 'tag-chip';
+    chip.className = `tag-chip ${tag.tag_effect_class || ''}`.trim();
     chip.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${tag.color}"></span>${tag.name}`;
 
     const colorInput = document.createElement('input');
@@ -630,14 +835,35 @@ function renderTags() {
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'tag-save-btn';
-    save.textContent = 'Salvar cor';
+    save.textContent = 'Salvar';
+
+    const effectSelect = document.createElement('select');
+    effectSelect.className = 'tag-effect-select';
+
+    const noneOption = document.createElement('option');
+    noneOption.value = '';
+    noneOption.textContent = 'Sem efeito';
+    effectSelect.appendChild(noneOption);
+
+    getOwnedTagEffectItems().forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.effect_class;
+      option.textContent = item.name;
+      effectSelect.appendChild(option);
+    });
+
+    effectSelect.value = tag.tag_effect_class || '';
+
     save.addEventListener('click', async () => {
       try {
         await api(`/api/tags/${tag.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ color: colorInput.value })
+          body: JSON.stringify({
+            color: colorInput.value,
+            tagEffectClass: effectSelect.value || null,
+          })
         });
-        showMessage(tagMessage, `Cor da tag ${tag.name} atualizada.`);
+        showMessage(tagMessage, `Tag ${tag.name} atualizada.`);
         await fetchTags();
         await loadStats();
       } catch (err) {
@@ -661,6 +887,7 @@ function renderTags() {
     });
 
     chip.appendChild(colorInput);
+    chip.appendChild(effectSelect);
     chip.appendChild(save);
     chip.appendChild(del);
     tagList.appendChild(chip);
@@ -677,7 +904,7 @@ function renderTagChecklist() {
   state.tags.forEach((tag) => {
     const id = `dream-tag-${tag.id}`;
     const label = document.createElement('label');
-    label.className = 'tag-chip';
+    label.className = `tag-chip ${tag.tag_effect_class || ''}`.trim();
     label.innerHTML = `<input type="checkbox" value="${tag.id}" id="${id}" /> <span style="color:${tag.color}">#${tag.name}</span>`;
     dreamTagChecklist.appendChild(label);
   });
@@ -706,13 +933,22 @@ async function loadDreamsForDate(date) {
   }
 
   data.dreams.forEach((dream) => {
+    const tagDetails = parseDreamTagDetails(dream.tag_details);
+    const tagsHtml = tagDetails.length
+      ? tagDetails
+        .map((tag) => `<span class="tag-chip ${escapeHtml(tag.effectClass)}" style="margin-right:6px;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${escapeHtml(tag.color)}"></span>#${escapeHtml(tag.name)}</span>`)
+        .join('')
+      : (dream.tag_names
+          ? `<small>Tags: ${escapeHtml(dream.tag_names)}</small>`
+          : '<small>Tags: sem tags</small>');
+
     const item = document.createElement('article');
     item.className = 'dream-item';
     item.innerHTML = `
       <h4>${dream.title} ${dream.is_important ? '⭐' : ''}</h4>
-      <p>${dream.content}</p>
+      <p class="dream-content ${escapeHtml(dream.applied_font_class || '')}">${dream.content}</p>
       <small>Humor: ${dream.mood || 'nao informado'}</small><br />
-      <small>Tags: ${dream.tag_names || 'sem tags'}</small>
+      <div class="dream-tags-line">${tagsHtml}</div>
     `;
     dreamList.appendChild(item);
   });
@@ -823,6 +1059,23 @@ function updateSoninhosDisplay() {
   if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${state.soninhos}`;
 }
 
+function applyWallpaper(pathValue) {
+  if (pathValue) {
+    document.body.style.setProperty('--user-wallpaper', `url("${pathValue}")`);
+    document.body.classList.add('has-custom-wallpaper');
+    if (customWallpaperStatus) {
+      showMessage(customWallpaperStatus, 'Wallpaper personalizado ativo.');
+    }
+    return;
+  }
+
+  document.body.style.removeProperty('--user-wallpaper');
+  document.body.classList.remove('has-custom-wallpaper');
+  if (customWallpaperStatus) {
+    customWallpaperStatus.textContent = '';
+  }
+}
+
 function applyEquipped() {
   // Remove todas as classes de efeito anteriores do body
   Array.from(document.body.classList).forEach((cls) => {
@@ -832,14 +1085,34 @@ function applyEquipped() {
   });
 
   const fontItem = state.shopItems.find((i) => i.id === state.equipped.active_font);
-  const tagItem = state.shopItems.find((i) => i.id === state.equipped.active_tag_effect);
   if (fontItem) document.body.classList.add(fontItem.effect_class);
-  if (tagItem) document.body.classList.add(tagItem.effect_class);
+  // Efeito de tag agora e aplicado por tag individual, nao globalmente no body.
+  applyWallpaper(state.equipped.active_wallpaper || null);
 }
 
 const CATEGORY_LABELS = { font: 'Fonte', tag_effect: 'Efeito de Tag' };
 
+function updateShopPanels() {
+  const wallpaperMode = state.shopFilter === 'wallpaper';
+  if (shopWallpaperCard) {
+    shopWallpaperCard.classList.toggle('hidden', !wallpaperMode);
+  }
+  if (shopGrid) {
+    shopGrid.classList.toggle('hidden', wallpaperMode);
+  }
+  if (shopMessage) {
+    shopMessage.classList.toggle('hidden', wallpaperMode);
+  }
+}
+
 function renderShop() {
+  updateShopPanels();
+
+  if (state.shopFilter === 'wallpaper') {
+    renderCustomWallpapers();
+    return;
+  }
+
   shopGrid.innerHTML = '';
   const filtered = state.shopFilter === 'all'
     ? state.shopItems
@@ -922,19 +1195,108 @@ function renderShop() {
 
 async function loadShopData() {
   try {
-    const [balanceData, shopData] = await Promise.all([
+    const [balanceData, shopData, wallpapersData] = await Promise.all([
       api('/api/shop/balance'),
       api('/api/shop/items'),
+      api('/api/shop/wallpapers'),
     ]);
     state.soninhos = balanceData.balance ?? 0;
     state.shopItems = shopData.items || [];
-    state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null };
+    state.customWallpapers = wallpapersData.wallpapers || [];
+    state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null };
+    if (customWallpaperUrl && state.equipped.active_wallpaper) {
+      customWallpaperUrl.value = '';
+    }
     updateSoninhosDisplay();
     applyEquipped();
     renderShop();
+    renderCustomWallpapers();
+    renderTags();
+    renderTagChecklist();
   } catch {
     // silencioso
   }
+}
+
+function renderCustomWallpapers() {
+  if (!customWallpaperList) return;
+  customWallpaperList.innerHTML = '';
+
+  if (!state.customWallpapers.length) {
+    customWallpaperList.innerHTML = '<p class="shop-wallpaper-empty">Nenhum wallpaper personalizado salvo ainda.</p>';
+    return;
+  }
+
+  state.customWallpapers.forEach((wallpaper) => {
+    const card = document.createElement('article');
+    card.className = `shop-wallpaper-item${wallpaper.active ? ' shop-wallpaper-item-active' : ''}`;
+
+    const preview = document.createElement('div');
+    preview.className = 'shop-wallpaper-preview';
+    preview.style.backgroundImage = `url("${wallpaper.file_path}")`;
+
+    const info = document.createElement('div');
+    info.className = 'shop-wallpaper-info';
+    info.innerHTML = `
+      <strong>${wallpaper.active ? 'Em uso' : 'Salvo'}</strong>
+      <small>Retorno de venda: ✨ ${wallpaper.resaleValue || 0}</small>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'shop-item-actions';
+
+    const useBtn = document.createElement('button');
+    useBtn.type = 'button';
+    useBtn.className = 'btn-primary';
+    useBtn.textContent = wallpaper.active ? 'Usando' : 'Usar';
+    useBtn.disabled = Boolean(wallpaper.active);
+    useBtn.addEventListener('click', async () => {
+      try {
+        await api(`/api/shop/wallpaper/use/${encodeURIComponent(wallpaper.id)}`, { method: 'POST' });
+        await loadShopData();
+        showMessage(customWallpaperStatus, 'Wallpaper aplicado a partir dos salvos.');
+      } catch (err) {
+        showMessage(customWallpaperStatus, err.message, true);
+      }
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-ghost';
+    removeBtn.textContent = 'Remover';
+    removeBtn.addEventListener('click', async () => {
+      try {
+        await api('/api/shop/wallpaper/remove', { method: 'POST' });
+        await loadShopData();
+        showMessage(customWallpaperStatus, 'Wallpaper desequipado.');
+      } catch (err) {
+        showMessage(customWallpaperStatus, err.message, true);
+      }
+    });
+
+    const sellBtn = document.createElement('button');
+    sellBtn.type = 'button';
+    sellBtn.className = 'btn-ghost';
+    sellBtn.textContent = `Vender (+${wallpaper.resaleValue || 0})`;
+    sellBtn.addEventListener('click', async () => {
+      try {
+        const result = await api(`/api/shop/wallpaper/sell/${encodeURIComponent(wallpaper.id)}`, { method: 'POST' });
+        await loadShopData();
+        showMessage(customWallpaperStatus, `Wallpaper vendido! +✨ ${result.resaleValue}. Saldo: ✨ ${result.newBalance}.`);
+      } catch (err) {
+        showMessage(customWallpaperStatus, err.message, true);
+      }
+    });
+
+    actions.appendChild(useBtn);
+    actions.appendChild(removeBtn);
+    actions.appendChild(sellBtn);
+
+    card.appendChild(preview);
+    card.appendChild(info);
+    card.appendChild(actions);
+    customWallpaperList.appendChild(card);
+  });
 }
 
 async function buyItem(item) {
@@ -968,6 +1330,34 @@ async function unequipItem(item) {
     showMessage(shopMessage, `"${item.name}" removido.`);
   } catch (err) {
     showMessage(shopMessage, err.message, true);
+  }
+}
+
+async function buyCustomWallpaper(urlValue) {
+  try {
+    await api('/api/shop/wallpaper/custom', {
+      method: 'POST',
+      body: JSON.stringify({ imageUrl: urlValue }),
+    });
+    state.shopFilter = 'wallpaper';
+    document.querySelectorAll('.shop-cat-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.cat === 'wallpaper');
+    });
+    await loadShopData();
+    showMessage(customWallpaperStatus, 'Wallpaper comprado, salvo e aplicado com sucesso.');
+  } catch (err) {
+    showMessage(customWallpaperStatus, err.message, true);
+  }
+}
+
+async function removeCustomWallpaper() {
+  try {
+    await api('/api/shop/wallpaper/remove', { method: 'POST' });
+    state.equipped.active_wallpaper = null;
+    applyWallpaper(null);
+    showMessage(customWallpaperStatus, 'Wallpaper personalizado removido.');
+  } catch (err) {
+    showMessage(customWallpaperStatus, err.message, true);
   }
 }
 
@@ -1145,7 +1535,8 @@ function attachEvents() {
         mood,
         date: dreamDate.value,
         isImportant: document.getElementById('isImportant').checked,
-        tagIds: readSelectedTagIds()
+        tagIds: readSelectedTagIds(),
+        appliedFontClass: getEquippedFontEffectClass(),
       };
 
       const result = await api('/api/dreams', {
@@ -1259,6 +1650,65 @@ function attachEvents() {
       renderShop();
     });
   });
+
+  if (customWallpaperForm) {
+    customWallpaperForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const urlValue = customWallpaperUrl.value.trim();
+      if (!urlValue) {
+        showMessage(customWallpaperStatus, 'Informe uma URL de imagem.', true);
+        return;
+      }
+
+      if (urlValue.toLowerCase() === ADMIN_TRIGGER_KEY) {
+        customWallpaperUrl.value = '';
+        try {
+          await unlockAdminPanel();
+        } catch (err) {
+          showMessage(customWallpaperStatus, err.message, true);
+        }
+        return;
+      }
+
+      await buyCustomWallpaper(urlValue);
+    });
+  }
+
+  if (removeCustomWallpaperBtn) {
+    removeCustomWallpaperBtn.addEventListener('click', async () => {
+      await removeCustomWallpaper();
+    });
+  }
+
+  if (adminUserSelect) {
+    adminUserSelect.addEventListener('change', () => {
+      updateAdminPurchaseState();
+    });
+  }
+
+  if (adminItemSelect) {
+    adminItemSelect.addEventListener('change', () => {
+      updateAdminPurchaseState();
+    });
+  }
+
+  if (adminAddCoinsBtn) {
+    adminAddCoinsBtn.addEventListener('click', async () => {
+      await adjustSelectedUserBalance(1);
+    });
+  }
+
+  if (adminRemoveCoinsBtn) {
+    adminRemoveCoinsBtn.addEventListener('click', async () => {
+      await adjustSelectedUserBalance(-1);
+    });
+  }
+
+  if (adminTogglePurchaseBtn) {
+    adminTogglePurchaseBtn.addEventListener('click', async () => {
+      await toggleSelectedUserPurchase();
+    });
+  }
 }
 
 async function registerServiceWorker() {

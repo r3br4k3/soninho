@@ -57,6 +57,7 @@ export async function getDb() {
       mood TEXT,
       date TEXT NOT NULL,
       is_important INTEGER DEFAULT 0,
+      applied_font_class TEXT DEFAULT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -66,6 +67,7 @@ export async function getDb() {
       user_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       color TEXT DEFAULT '#2f7f6e',
+      tag_effect_class TEXT DEFAULT NULL,
       UNIQUE(user_id, name),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -121,6 +123,17 @@ export async function getDb() {
       user_id INTEGER PRIMARY KEY,
       active_font TEXT DEFAULT NULL,
       active_tag_effect TEXT DEFAULT NULL,
+      active_wallpaper TEXT DEFAULT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_wallpapers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      file_path TEXT NOT NULL,
+      source_url TEXT,
+      price_paid INTEGER NOT NULL DEFAULT 200,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
@@ -128,6 +141,27 @@ export async function getDb() {
   // Adiciona coluna soninhos_balance se ainda nao existir (migracao segura)
   try {
     await db.exec('ALTER TABLE users ADD COLUMN soninhos_balance INTEGER DEFAULT 0');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Adiciona coluna active_wallpaper se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE user_equipped ADD COLUMN active_wallpaper TEXT DEFAULT NULL');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Adiciona coluna tag_effect_class em tags se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE tags ADD COLUMN tag_effect_class TEXT DEFAULT NULL');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Adiciona coluna applied_font_class em dreams se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE dreams ADD COLUMN applied_font_class TEXT DEFAULT NULL');
   } catch {
     // coluna ja existe, sem problema
   }

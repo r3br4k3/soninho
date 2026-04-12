@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -8,6 +9,9 @@ import { getDb } from "./db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "..", "public");
+const wallpaperStoreDir = path.join(publicDir, "wallpapers");
+const CUSTOM_WALLPAPER_PRICE = 200;
+const ADMIN_KEY = String(process.env.ADMIN_KEY || "william").toLowerCase();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +31,64 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static(publicDir));
+
+function isValidHttpUrl(value) {
+  try {
+    const parsed = new URL(String(value));
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function fileExtensionFromContentType(contentType) {
+  const normalized = String(contentType || "").toLowerCase();
+  if (normalized.includes("image/jpeg")) return ".jpg";
+  if (normalized.includes("image/png")) return ".png";
+  if (normalized.includes("image/webp")) return ".webp";
+  if (normalized.includes("image/gif")) return ".gif";
+  return null;
+}
+
+async function ensureWallpaperStoreDir() {
+  await fs.mkdir(wallpaperStoreDir, { recursive: true });
+}
+
+async function downloadWallpaperToStore(imageUrl, userId) {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error("Nao foi possivel baixar a imagem do wallpaper");
+  }
+
+  const contentType = response.headers.get("content-type");
+  const extension = fileExtensionFromContentType(contentType);
+  if (!extension) {
+    throw new Error("A URL informada nao aponta para uma imagem valida (jpg, png, webp, gif)");
+  }
+
+  const imageBuffer = Buffer.from(await response.arrayBuffer());
+  const maxBytes = 8 * 1024 * 1024;
+  if (imageBuffer.length > maxBytes) {
+    throw new Error("A imagem excede o limite de 8MB");
+  }
+
+  await ensureWallpaperStoreDir();
+  const fileName = `user-${userId}-${Date.now()}${extension}`;
+  const absoluteFilePath = path.join(wallpaperStoreDir, fileName);
+  await fs.writeFile(absoluteFilePath, imageBuffer);
+  return `/wallpapers/${fileName}`;
+}
+
+async function deleteWallpaperFile(filePath) {
+  if (!filePath) return;
+  const normalized = String(filePath).replace(/^\/+/, "");
+  const absolutePath = path.join(publicDir, normalized);
+  try {
+    await fs.unlink(absolutePath);
+  } catch {
+    // arquivo pode ja ter sido removido
+  }
+}
 
 function getTokenFromHeader(req) {
   const auth = req.headers.authorization || "";
@@ -59,6 +121,25 @@ async function authMiddleware(req, res, next) {
   } catch {
     return res.status(401).json({ message: "Sessao invalida" });
   }
+}
+
+function requireAdmin(req, res, next) {
+  const providedKey = String(req.headers["x-admin-key"] || "").toLowerCase();
+  if (!providedKey || providedKey !== ADMIN_KEY) {
+    return res.status(403).json({ message: "Acesso admin negado" });
+  }
+  return next();
+}
+
+async function getOwnedTagEffectClasses(db, userId) {
+  const rows = await db.all(
+    `SELECT si.effect_class
+     FROM user_purchases up
+     JOIN shop_items si ON si.id = up.item_id
+     WHERE up.user_id = ? AND si.category = 'tag_effect'`,
+    [userId]
+  );
+  return new Set(rows.map((row) => row.effect_class).filter(Boolean));
 }
 
 async function areFriends(db, userA, userB) {
@@ -375,14 +456,24 @@ app.get("/api/tags", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/tags", authMiddleware, async (req, res) => {
-  const { name, color } = req.body;
+  const { name, color, tagEffectClass } = req.body;
   if (!name) return res.status(400).json({ message: "Nome da tag obrigatorio" });
 
   const db = await getDb();
+
+  let effectClassToSave = null;
+  if (tagEffectClass != null && String(tagEffectClass).trim() !== "") {
+    const ownedEffects = await getOwnedTagEffectClasses(db, req.user.id);
+    if (!ownedEffects.has(String(tagEffectClass))) {
+      return res.status(400).json({ message: "Voce nao possui esse efeito de tag" });
+    }
+    effectClassToSave = String(tagEffectClass);
+  }
+
   try {
     const result = await db.run(
-      "INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)",
-      [req.user.id, name.trim(), color || "#2f7f6e"]
+      "INSERT INTO tags (user_id, name, color, tag_effect_class) VALUES (?, ?, ?, ?)",
+      [req.user.id, name.trim(), color || "#2f7f6e", effectClassToSave]
     );
     const created = await db.get("SELECT * FROM tags WHERE id = ?", [result.lastID]);
     return res.status(201).json({ tag: created });
@@ -392,18 +483,45 @@ app.post("/api/tags", authMiddleware, async (req, res) => {
 });
 
 app.patch("/api/tags/:id", authMiddleware, async (req, res) => {
-  const { color } = req.body;
-  if (!color) return res.status(400).json({ message: "Cor da tag obrigatoria" });
-
-  const validHexColor = /^#[0-9a-fA-F]{6}$/;
-  if (!validHexColor.test(color)) {
-    return res.status(400).json({ message: "Cor invalida. Use formato hexadecimal" });
+  const { color, tagEffectClass } = req.body;
+  const hasColor = typeof color === "string";
+  const hasEffect = Object.prototype.hasOwnProperty.call(req.body || {}, "tagEffectClass");
+  if (!hasColor && !hasEffect) {
+    return res.status(400).json({ message: "Informe cor e/ou efeito da tag" });
   }
 
   const db = await getDb();
+  const current = await db.get("SELECT * FROM tags WHERE id = ? AND user_id = ?", [req.params.id, req.user.id]);
+  if (!current) {
+    return res.status(404).json({ message: "Tag nao encontrada" });
+  }
+
+  let nextColor = current.color;
+  if (hasColor) {
+    const validHexColor = /^#[0-9a-fA-F]{6}$/;
+    if (!validHexColor.test(color)) {
+      return res.status(400).json({ message: "Cor invalida. Use formato hexadecimal" });
+    }
+    nextColor = color;
+  }
+
+  let nextEffectClass = current.tag_effect_class || null;
+  if (hasEffect) {
+    const normalized = tagEffectClass == null ? "" : String(tagEffectClass).trim();
+    if (!normalized) {
+      nextEffectClass = null;
+    } else {
+      const ownedEffects = await getOwnedTagEffectClasses(db, req.user.id);
+      if (!ownedEffects.has(normalized)) {
+        return res.status(400).json({ message: "Voce nao possui esse efeito de tag" });
+      }
+      nextEffectClass = normalized;
+    }
+  }
+
   const result = await db.run(
-    "UPDATE tags SET color = ? WHERE id = ? AND user_id = ?",
-    [color, req.params.id, req.user.id]
+    "UPDATE tags SET color = ?, tag_effect_class = ? WHERE id = ? AND user_id = ?",
+    [nextColor, nextEffectClass, req.params.id, req.user.id]
   );
 
   if (!result.changes) {
@@ -435,7 +553,11 @@ app.get("/api/dreams", authMiddleware, async (req, res) => {
   if (date) {
     dreams = await db.all(
       `SELECT d.*,
-        GROUP_CONCAT(t.name, ', ') AS tag_names
+        GROUP_CONCAT(t.name, ', ') AS tag_names,
+        GROUP_CONCAT(
+          t.name || '::' || COALESCE(t.color, '#7f6edc') || '::' || COALESCE(t.tag_effect_class, ''),
+          '||'
+        ) AS tag_details
        FROM dreams d
        LEFT JOIN dream_tags dt ON dt.dream_id = d.id
        LEFT JOIN tags t ON t.id = dt.tag_id
@@ -463,16 +585,17 @@ app.get("/api/dreams", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/dreams", authMiddleware, async (req, res) => {
-  const { title, content, mood, date, isImportant, tagIds } = req.body;
+  const { title, content, mood, date, isImportant, tagIds, appliedFontClass } = req.body;
   if (!title || !content || !date) {
     return res.status(400).json({ message: "Titulo, conteudo e data sao obrigatorios" });
   }
 
   const db = await getDb();
+  const fontClass = String(appliedFontClass || "").trim() || null;
   const result = await db.run(
-    `INSERT INTO dreams (user_id, title, content, mood, date, is_important)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [req.user.id, title, content, mood || null, date, isImportant ? 1 : 0]
+    `INSERT INTO dreams (user_id, title, content, mood, date, is_important, applied_font_class)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [req.user.id, title, content, mood || null, date, isImportant ? 1 : 0, fontClass]
   );
 
   const tagCount = Array.isArray(tagIds) ? tagIds.length : 0;
@@ -574,6 +697,7 @@ app.get("/api/shop/items", authMiddleware, async (req, res) => {
     equipped: {
       active_font: equipped?.active_font || null,
       active_tag_effect: equipped?.active_tag_effect || null,
+      active_wallpaper: equipped?.active_wallpaper || null,
     },
   });
 });
@@ -651,6 +775,252 @@ app.post("/api/shop/unequip", authMiddleware, async (req, res) => {
   }
 
   return res.json({ success: true });
+});
+
+app.post("/api/shop/wallpaper/custom", authMiddleware, async (req, res) => {
+  const imageUrl = String(req.body?.imageUrl || "").trim();
+  if (!imageUrl) return res.status(400).json({ message: "Informe a URL da imagem" });
+  if (!isValidHttpUrl(imageUrl)) return res.status(400).json({ message: "URL invalida. Use http:// ou https://" });
+
+  const db = await getDb();
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = user?.soninhos_balance ?? 0;
+  if (balance < CUSTOM_WALLPAPER_PRICE) {
+    return res.status(400).json({
+      message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${CUSTOM_WALLPAPER_PRICE}`,
+    });
+  }
+
+  try {
+    const savedPath = await downloadWallpaperToStore(imageUrl, req.user.id);
+
+    await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [
+      CUSTOM_WALLPAPER_PRICE,
+      req.user.id,
+    ]);
+    await db.run(
+      "INSERT INTO user_wallpapers (user_id, file_path, source_url, price_paid) VALUES (?, ?, ?, ?)",
+      [req.user.id, savedPath, imageUrl, CUSTOM_WALLPAPER_PRICE]
+    );
+    await db.run(
+      "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+      [req.user.id]
+    );
+    await db.run("UPDATE user_equipped SET active_wallpaper = ? WHERE user_id = ?", [savedPath, req.user.id]);
+
+    const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+    return res.json({ success: true, wallpaperPath: savedPath, newBalance: userAfter.soninhos_balance });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Falha ao aplicar wallpaper" });
+  }
+});
+
+app.get("/api/shop/wallpapers", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const equipped = await db.get("SELECT active_wallpaper FROM user_equipped WHERE user_id = ?", [req.user.id]);
+  const wallpapers = await db.all(
+    `SELECT id, file_path, source_url, price_paid, created_at
+     FROM user_wallpapers
+     WHERE user_id = ?
+     ORDER BY created_at DESC, id DESC`,
+    [req.user.id]
+  );
+
+  return res.json({
+    wallpapers: wallpapers.map((item) => ({
+      ...item,
+      active: equipped?.active_wallpaper === item.file_path,
+      resaleValue: Math.floor((item.price_paid || 0) / 2),
+    })),
+  });
+});
+
+app.post("/api/shop/wallpaper/use/:wallpaperId", authMiddleware, async (req, res) => {
+  const wallpaperId = Number(req.params.wallpaperId);
+  if (!Number.isInteger(wallpaperId) || wallpaperId <= 0) {
+    return res.status(400).json({ message: "Wallpaper invalido" });
+  }
+
+  const db = await getDb();
+  const wallpaper = await db.get(
+    "SELECT id, file_path FROM user_wallpapers WHERE id = ? AND user_id = ?",
+    [wallpaperId, req.user.id]
+  );
+  if (!wallpaper) return res.status(404).json({ message: "Wallpaper nao encontrado" });
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_wallpaper = ? WHERE user_id = ?", [wallpaper.file_path, req.user.id]);
+  return res.json({ success: true, wallpaperPath: wallpaper.file_path });
+});
+
+app.post("/api/shop/wallpaper/remove", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_wallpaper = NULL WHERE user_id = ?", [req.user.id]);
+  return res.json({ success: true });
+});
+
+app.post("/api/shop/wallpaper/remove/:wallpaperId", authMiddleware, async (req, res) => {
+  const wallpaperId = Number(req.params.wallpaperId);
+  if (!Number.isInteger(wallpaperId) || wallpaperId <= 0) {
+    return res.status(400).json({ message: "Wallpaper invalido" });
+  }
+
+  const db = await getDb();
+  const wallpaper = await db.get(
+    "SELECT id, file_path FROM user_wallpapers WHERE id = ? AND user_id = ?",
+    [wallpaperId, req.user.id]
+  );
+  if (!wallpaper) return res.status(404).json({ message: "Wallpaper nao encontrado" });
+
+  await db.run("DELETE FROM user_wallpapers WHERE id = ? AND user_id = ?", [wallpaperId, req.user.id]);
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run(
+    "UPDATE user_equipped SET active_wallpaper = CASE WHEN active_wallpaper = ? THEN NULL ELSE active_wallpaper END WHERE user_id = ?",
+    [wallpaper.file_path, req.user.id]
+  );
+  await deleteWallpaperFile(wallpaper.file_path);
+
+  return res.json({ success: true });
+});
+
+app.post("/api/shop/wallpaper/sell/:wallpaperId", authMiddleware, async (req, res) => {
+  const wallpaperId = Number(req.params.wallpaperId);
+  if (!Number.isInteger(wallpaperId) || wallpaperId <= 0) {
+    return res.status(400).json({ message: "Wallpaper invalido" });
+  }
+
+  const db = await getDb();
+  const wallpaper = await db.get(
+    "SELECT id, file_path, price_paid FROM user_wallpapers WHERE id = ? AND user_id = ?",
+    [wallpaperId, req.user.id]
+  );
+  if (!wallpaper) return res.status(404).json({ message: "Wallpaper nao encontrado" });
+
+  const resaleValue = Math.floor((wallpaper.price_paid || CUSTOM_WALLPAPER_PRICE) / 2);
+  await db.run("DELETE FROM user_wallpapers WHERE id = ? AND user_id = ?", [wallpaperId, req.user.id]);
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run(
+    "UPDATE user_equipped SET active_wallpaper = CASE WHEN active_wallpaper = ? THEN NULL ELSE active_wallpaper END WHERE user_id = ?",
+    [wallpaper.file_path, req.user.id]
+  );
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance + ? WHERE id = ?", [resaleValue, req.user.id]);
+  await deleteWallpaperFile(wallpaper.file_path);
+
+  const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ success: true, resaleValue, newBalance: userAfter?.soninhos_balance ?? 0 });
+});
+
+app.get("/api/admin/users", authMiddleware, requireAdmin, async (req, res) => {
+  const db = await getDb();
+
+  const users = await db.all(
+    "SELECT id, name, email, created_at, soninhos_balance FROM users ORDER BY id DESC"
+  );
+  const purchaseRows = await db.all(
+    "SELECT user_id, item_id FROM user_purchases ORDER BY user_id, item_id"
+  );
+
+  const purchasesByUser = new Map();
+  purchaseRows.forEach((row) => {
+    if (!purchasesByUser.has(row.user_id)) purchasesByUser.set(row.user_id, []);
+    purchasesByUser.get(row.user_id).push(row.item_id);
+  });
+
+  return res.json({
+    users: users.map((user) => ({
+      ...user,
+      purchases: purchasesByUser.get(user.id) || [],
+    })),
+  });
+});
+
+app.get("/api/admin/shop/items", authMiddleware, requireAdmin, async (req, res) => {
+  const db = await getDb();
+  const items = await db.all("SELECT id, name, category, price FROM shop_items ORDER BY category, price");
+  return res.json({ items });
+});
+
+app.post("/api/admin/users/:userId/coins", authMiddleware, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const delta = Number(req.body?.delta);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Usuario invalido" });
+  }
+  if (!Number.isFinite(delta) || delta === 0) {
+    return res.status(400).json({ message: "Delta invalido" });
+  }
+
+  const db = await getDb();
+  const user = await db.get("SELECT id, soninhos_balance FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ message: "Usuario nao encontrado" });
+
+  const nextBalance = (user.soninhos_balance ?? 0) + delta;
+  if (nextBalance < 0) {
+    return res.status(400).json({ message: "Saldo nao pode ficar negativo" });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = ? WHERE id = ?", [nextBalance, userId]);
+  const updated = await db.get("SELECT id, name, email, soninhos_balance FROM users WHERE id = ?", [userId]);
+  return res.json({ success: true, user: updated });
+});
+
+app.post("/api/admin/users/:userId/purchases/toggle", authMiddleware, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const itemId = String(req.body?.itemId || "").trim();
+  const owned = Boolean(req.body?.owned);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Usuario invalido" });
+  }
+  if (!itemId) {
+    return res.status(400).json({ message: "Item invalido" });
+  }
+
+  const db = await getDb();
+  const user = await db.get("SELECT id FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ message: "Usuario nao encontrado" });
+
+  const item = await db.get("SELECT id, category FROM shop_items WHERE id = ?", [itemId]);
+  if (!item) return res.status(404).json({ message: "Item nao encontrado" });
+
+  if (owned) {
+    await db.run("INSERT OR IGNORE INTO user_purchases (user_id, item_id) VALUES (?, ?)", [userId, itemId]);
+  } else {
+    await db.run("DELETE FROM user_purchases WHERE user_id = ? AND item_id = ?", [userId, itemId]);
+
+    await db.run(
+      "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper) VALUES (?, NULL, NULL, NULL)",
+      [userId]
+    );
+    if (item.category === "font") {
+      await db.run(
+        "UPDATE user_equipped SET active_font = CASE WHEN active_font = ? THEN NULL ELSE active_font END WHERE user_id = ?",
+        [itemId, userId]
+      );
+    }
+    if (item.category === "tag_effect") {
+      await db.run(
+        "UPDATE user_equipped SET active_tag_effect = CASE WHEN active_tag_effect = ? THEN NULL ELSE active_tag_effect END WHERE user_id = ?",
+        [itemId, userId]
+      );
+    }
+  }
+
+  return res.json({ success: true, owned });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
