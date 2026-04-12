@@ -69,6 +69,7 @@ const locationShareStatus = document.getElementById('locationShareStatus');
 const friendLocationSelect = document.getElementById('friendLocationSelect');
 const refreshFriendLocationBtn = document.getElementById('refreshFriendLocationBtn');
 const friendLocationView = document.getElementById('friendLocationView');
+const friendLocationStatusList = document.getElementById('friendLocationStatusList');
 
 async function hashText(text) {
   const data = new TextEncoder().encode(text);
@@ -96,6 +97,15 @@ function showAuthMessage(text, isError = false) {
 function showMessage(el, text, isError = false) {
   el.textContent = text;
   el.style.color = isError ? '#b74242' : '#7f6edc';
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function formatDateTime(value) {
@@ -137,13 +147,53 @@ function renderFriendLocationOptions() {
   state.friends.forEach((friend) => {
     const option = document.createElement('option');
     option.value = String(friend.id);
-    option.textContent = friend.name;
+    option.textContent = `${friend.name} ${friend.locationSharing ? '🟢' : '🔴'}`;
     friendLocationSelect.appendChild(option);
   });
 
   if (previousValue && Array.from(friendLocationSelect.options).some((opt) => opt.value === previousValue)) {
     friendLocationSelect.value = previousValue;
   }
+}
+
+function renderFriendLocationStatusList() {
+  friendLocationStatusList.innerHTML = '';
+
+  if (!state.friends.length) {
+    friendLocationStatusList.innerHTML = '<p>Sem amigos adicionados ainda.</p>';
+    return;
+  }
+
+  state.friends.forEach((friend) => {
+    const row = document.createElement('article');
+    row.className = 'friend-item';
+
+    const info = document.createElement('div');
+    info.className = 'friend-main';
+    info.innerHTML = `
+      <strong>${escapeHtml(friend.name)}</strong>
+      <small>${escapeHtml(friend.email)}</small>
+      <span class="friend-meta">Atualizacao: ${friend.locationUpdatedAt ? formatDateTime(friend.locationUpdatedAt) : 'sem registro'}</span>
+    `;
+
+    const status = document.createElement('span');
+    status.className = `status-pill ${friend.locationSharing ? 'status-on' : 'status-off'}`;
+    status.textContent = friend.locationSharing ? 'Compartilhando' : 'Nao compartilhando';
+
+    row.appendChild(info);
+    row.appendChild(status);
+    friendLocationStatusList.appendChild(row);
+  });
+}
+
+function getCurrentPositionAsync() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000
+    });
+  });
 }
 
 async function sendOwnLocation(position) {
@@ -179,13 +229,21 @@ async function fetchFriendLocation(friendId) {
 
     const { latitude, longitude, accuracy, updatedAt } = data.location;
     const mapUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    const mapEmbedUrl = `https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`;
     friendLocationView.innerHTML = `
       <strong>${data.friend.name}</strong><br />
       Latitude: ${latitude.toFixed(6)}<br />
       Longitude: ${longitude.toFixed(6)}<br />
       Precisao aproximada: ${Math.round(accuracy || 0)} m<br />
       Atualizado em: ${formatDateTime(updatedAt)}<br />
-      <a class="location-link" href="${mapUrl}" target="_blank" rel="noopener noreferrer">Abrir no mapa</a>
+      <a class="location-link" href="${mapUrl}" target="_blank" rel="noopener noreferrer">Abrir no Google Maps</a>
+      <iframe
+        class="location-map"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        src="${mapEmbedUrl}"
+        title="Mapa de localizacao de ${escapeHtml(data.friend.name)}"
+      ></iframe>
     `;
   } catch (err) {
     friendLocationView.textContent = err.message;
@@ -198,10 +256,29 @@ async function startLocationSharing() {
     return;
   }
 
+  let firstPosition;
+  try {
+    firstPosition = await getCurrentPositionAsync();
+  } catch (error) {
+    const message = error.code === error.PERMISSION_DENIED
+      ? 'Permissao de localizacao negada.'
+      : 'Nao foi possivel obter sua localizacao inicial.';
+    showMessage(locationShareStatus, message, true);
+    await api('/api/location/share', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: false })
+    });
+    state.locationSharingEnabled = false;
+    updateShareButton();
+    return;
+  }
+
   await api('/api/location/share', {
     method: 'POST',
     body: JSON.stringify({ enabled: true })
   });
+
+  await sendOwnLocation(firstPosition);
 
   stopLocationTrackingLocally();
 
@@ -229,6 +306,7 @@ async function startLocationSharing() {
 
   state.locationSharingEnabled = true;
   updateShareButton();
+  showMessage(locationShareStatus, `Compartilhando localizacao em tempo real (${formatDateTime(new Date())}).`);
 }
 
 async function stopLocationSharing() {
@@ -511,12 +589,17 @@ async function loadFriendsData() {
     api('/api/friends/requests')
   ]);
 
-  state.friends = friendsData.friends || [];
+  state.friends = (friendsData.friends || []).map((friend) => ({
+    ...friend,
+    locationSharing: Boolean(friend.location_sharing),
+    locationUpdatedAt: friend.location_updated_at || null
+  }));
   state.incomingRequests = requestsData.incoming || [];
   renderOwnerSelect();
   renderIncomingRequests();
   renderFriendsList();
   renderFriendLocationOptions();
+  renderFriendLocationStatusList();
 }
 
 function renderTags() {

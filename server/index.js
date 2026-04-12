@@ -147,14 +147,17 @@ app.get("/api/friends", authMiddleware, async (req, res) => {
       CASE WHEN fr.requester_id = ? THEN u2.id ELSE u1.id END AS id,
       CASE WHEN fr.requester_id = ? THEN u2.name ELSE u1.name END AS name,
       CASE WHEN fr.requester_id = ? THEN u2.email ELSE u1.email END AS email,
+      COALESCE(fl.is_sharing, 0) AS location_sharing,
+      fl.updated_at AS location_updated_at,
       fr.created_at
      FROM friend_requests fr
      JOIN users u1 ON u1.id = fr.requester_id
      JOIN users u2 ON u2.id = fr.addressee_id
+     LEFT JOIN friend_locations fl ON fl.user_id = CASE WHEN fr.requester_id = ? THEN u2.id ELSE u1.id END
      WHERE fr.status = 'accepted'
        AND (fr.requester_id = ? OR fr.addressee_id = ?)
      ORDER BY name`,
-    [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
+    [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
   );
 
   return res.json({ friends });
