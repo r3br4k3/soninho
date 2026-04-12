@@ -263,6 +263,108 @@ app.post("/api/friends/requests/:id/reject", authMiddleware, async (req, res) =>
   return res.json({ message: "Pedido recusado" });
 });
 
+app.get("/api/location/share", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const current = await db.get(
+    "SELECT is_sharing, updated_at FROM friend_locations WHERE user_id = ?",
+    [req.user.id]
+  );
+
+  return res.json({
+    enabled: Boolean(current?.is_sharing),
+    updatedAt: current?.updated_at || null
+  });
+});
+
+app.post("/api/location/share", authMiddleware, async (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  const db = await getDb();
+
+  await db.run(
+    `INSERT INTO friend_locations (user_id, is_sharing, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id)
+     DO UPDATE SET is_sharing = excluded.is_sharing, updated_at = CURRENT_TIMESTAMP`,
+    [req.user.id, enabled ? 1 : 0]
+  );
+
+  return res.json({ enabled });
+});
+
+app.post("/api/location/update", authMiddleware, async (req, res) => {
+  const latitude = Number(req.body?.latitude);
+  const longitude = Number(req.body?.longitude);
+  const accuracy = Number(req.body?.accuracy || 0);
+
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    return res.status(400).json({ message: "Latitude invalida" });
+  }
+
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ message: "Longitude invalida" });
+  }
+
+  const db = await getDb();
+  await db.run(
+    `INSERT INTO friend_locations (user_id, latitude, longitude, accuracy, is_sharing, updated_at)
+     VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id)
+     DO UPDATE SET
+       latitude = excluded.latitude,
+       longitude = excluded.longitude,
+       accuracy = excluded.accuracy,
+       is_sharing = 1,
+       updated_at = CURRENT_TIMESTAMP`,
+    [req.user.id, latitude, longitude, Number.isFinite(accuracy) ? accuracy : 0]
+  );
+
+  return res.json({ ok: true });
+});
+
+app.get("/api/friends/:friendId/location", authMiddleware, async (req, res) => {
+  const friendId = Number(req.params.friendId);
+  if (!Number.isInteger(friendId) || friendId <= 0) {
+    return res.status(400).json({ message: "Identificador de amigo invalido" });
+  }
+
+  const db = await getDb();
+  const canView = await areFriends(db, req.user.id, friendId);
+  if (!canView) {
+    return res.status(403).json({ message: "Acesso permitido apenas para amigos" });
+  }
+
+  const friend = await db.get("SELECT id, name FROM users WHERE id = ?", [friendId]);
+  if (!friend) {
+    return res.status(404).json({ message: "Amigo nao encontrado" });
+  }
+
+  const location = await db.get(
+    `SELECT latitude, longitude, accuracy, updated_at, is_sharing
+     FROM friend_locations
+     WHERE user_id = ?`,
+    [friendId]
+  );
+
+  if (!location || !location.is_sharing || location.latitude == null || location.longitude == null) {
+    return res.json({
+      friend,
+      available: false,
+      message: "Esse amigo nao esta compartilhando localizacao no momento"
+    });
+  }
+
+  return res.json({
+    friend,
+    available: true,
+    location: {
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+      accuracy: Number(location.accuracy || 0),
+      updatedAt: location.updated_at
+    }
+  });
+});
+
 app.get("/api/tags", authMiddleware, async (req, res) => {
   const db = await getDb();
   const tags = await db.all("SELECT * FROM tags WHERE user_id = ? ORDER BY name", [req.user.id]);

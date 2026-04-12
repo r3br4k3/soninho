@@ -22,7 +22,10 @@ const state = {
   tags: [],
   friends: [],
   incomingRequests: [],
-  selectedOwnerId: 'me'
+  selectedOwnerId: 'me',
+  locationSharingEnabled: false,
+  locationWatchId: null,
+  friendLocationPollId: null
 };
 
 const authView = document.getElementById('authView');
@@ -61,6 +64,11 @@ const friendSearchResults = document.getElementById('friendSearchResults');
 const incomingRequests = document.getElementById('incomingRequests');
 const friendsList = document.getElementById('friendsList');
 const friendMessage = document.getElementById('friendMessage');
+const locationShareBtn = document.getElementById('locationShareBtn');
+const locationShareStatus = document.getElementById('locationShareStatus');
+const friendLocationSelect = document.getElementById('friendLocationSelect');
+const refreshFriendLocationBtn = document.getElementById('refreshFriendLocationBtn');
+const friendLocationView = document.getElementById('friendLocationView');
 
 async function hashText(text) {
   const data = new TextEncoder().encode(text);
@@ -88,6 +96,185 @@ function showAuthMessage(text, isError = false) {
 function showMessage(el, text, isError = false) {
   el.textContent = text;
   el.style.color = isError ? '#b74242' : '#7f6edc';
+}
+
+function formatDateTime(value) {
+  if (!value) return 'agora';
+  const date = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return 'agora';
+  return date.toLocaleString('pt-BR');
+}
+
+function stopLocationTrackingLocally() {
+  if (state.locationWatchId !== null) {
+    navigator.geolocation.clearWatch(state.locationWatchId);
+    state.locationWatchId = null;
+  }
+}
+
+function renderFriendLocationOptions() {
+  const previousValue = friendLocationSelect.value;
+  friendLocationSelect.innerHTML = '';
+
+  if (!state.friends.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Adicione amigos para ver localizacao';
+    friendLocationSelect.appendChild(option);
+    friendLocationSelect.disabled = true;
+    refreshFriendLocationBtn.disabled = true;
+    return;
+  }
+
+  friendLocationSelect.disabled = false;
+  refreshFriendLocationBtn.disabled = false;
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Selecione um amigo';
+  friendLocationSelect.appendChild(placeholder);
+
+  state.friends.forEach((friend) => {
+    const option = document.createElement('option');
+    option.value = String(friend.id);
+    option.textContent = friend.name;
+    friendLocationSelect.appendChild(option);
+  });
+
+  if (previousValue && Array.from(friendLocationSelect.options).some((opt) => opt.value === previousValue)) {
+    friendLocationSelect.value = previousValue;
+  }
+}
+
+async function sendOwnLocation(position) {
+  await api('/api/location/update', {
+    method: 'POST',
+    body: JSON.stringify({
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy
+    })
+  });
+}
+
+function updateShareButton() {
+  locationShareBtn.textContent = state.locationSharingEnabled
+    ? 'Pausar compartilhamento'
+    : 'Ativar compartilhamento';
+  locationShareBtn.className = state.locationSharingEnabled ? 'btn-ghost' : 'btn-primary';
+}
+
+async function fetchFriendLocation(friendId) {
+  if (!friendId) {
+    friendLocationView.textContent = 'Selecione um amigo para ver a localizacao em tempo real.';
+    return;
+  }
+
+  try {
+    const data = await api(`/api/friends/${encodeURIComponent(friendId)}/location`);
+    if (!data.available) {
+      friendLocationView.textContent = data.message || 'Localizacao indisponivel agora.';
+      return;
+    }
+
+    const { latitude, longitude, accuracy, updatedAt } = data.location;
+    const mapUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    friendLocationView.innerHTML = `
+      <strong>${data.friend.name}</strong><br />
+      Latitude: ${latitude.toFixed(6)}<br />
+      Longitude: ${longitude.toFixed(6)}<br />
+      Precisao aproximada: ${Math.round(accuracy || 0)} m<br />
+      Atualizado em: ${formatDateTime(updatedAt)}<br />
+      <a class="location-link" href="${mapUrl}" target="_blank" rel="noopener noreferrer">Abrir no mapa</a>
+    `;
+  } catch (err) {
+    friendLocationView.textContent = err.message;
+  }
+}
+
+async function startLocationSharing() {
+  if (!('geolocation' in navigator)) {
+    showMessage(locationShareStatus, 'Geolocalizacao nao suportada neste dispositivo.', true);
+    return;
+  }
+
+  await api('/api/location/share', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: true })
+  });
+
+  stopLocationTrackingLocally();
+
+  state.locationWatchId = navigator.geolocation.watchPosition(
+    async (position) => {
+      try {
+        await sendOwnLocation(position);
+        showMessage(locationShareStatus, `Compartilhando localizacao em tempo real (${formatDateTime(new Date())}).`);
+      } catch (err) {
+        showMessage(locationShareStatus, err.message, true);
+      }
+    },
+    (error) => {
+      const message = error.code === error.PERMISSION_DENIED
+        ? 'Permissao de localizacao negada.'
+        : 'Nao foi possivel obter sua localizacao.';
+      showMessage(locationShareStatus, message, true);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 15000
+    }
+  );
+
+  state.locationSharingEnabled = true;
+  updateShareButton();
+}
+
+async function stopLocationSharing() {
+  stopLocationTrackingLocally();
+  await api('/api/location/share', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: false })
+  });
+  state.locationSharingEnabled = false;
+  updateShareButton();
+  showMessage(locationShareStatus, 'Compartilhamento de localizacao pausado.');
+}
+
+async function loadLocationSharingStatus() {
+  try {
+    const status = await api('/api/location/share');
+    state.locationSharingEnabled = Boolean(status.enabled);
+    updateShareButton();
+
+    if (state.locationSharingEnabled) {
+      showMessage(locationShareStatus, `Compartilhamento ativo (ultimo update: ${formatDateTime(status.updatedAt)}).`);
+      await startLocationSharing();
+    } else {
+      showMessage(locationShareStatus, 'Compartilhamento desativado.');
+    }
+  } catch {
+    state.locationSharingEnabled = false;
+    updateShareButton();
+  }
+}
+
+function stopFriendLocationPolling() {
+  if (state.friendLocationPollId) {
+    clearInterval(state.friendLocationPollId);
+    state.friendLocationPollId = null;
+  }
+}
+
+function startFriendLocationPolling() {
+  stopFriendLocationPolling();
+  state.friendLocationPollId = setInterval(() => {
+    const friendId = friendLocationSelect.value;
+    if (friendId) {
+      fetchFriendLocation(friendId);
+    }
+  }, 10000);
 }
 
 function selectedOwnerQueryPart() {
@@ -156,6 +343,10 @@ function setLoggedIn(user, token) {
 }
 
 function logout() {
+  stopLocationTrackingLocally();
+  stopFriendLocationPolling();
+  state.locationSharingEnabled = false;
+
   state.user = null;
   state.token = '';
   localStorage.removeItem('soninhos_user');
@@ -325,6 +516,7 @@ async function loadFriendsData() {
   renderOwnerSelect();
   renderIncomingRequests();
   renderFriendsList();
+  renderFriendLocationOptions();
 }
 
 function renderTags() {
@@ -535,6 +727,7 @@ function activateTab(tabName) {
 async function bootstrapAppData() {
   try {
     await loadFriendsData();
+    await loadLocationSharingStatus();
     await fetchTags();
     await loadDreamsForDate(state.currentDate);
     await renderCalendar();
@@ -651,6 +844,27 @@ function attachEvents() {
 
   logoutBtn.addEventListener('click', logout);
 
+  locationShareBtn.addEventListener('click', async () => {
+    try {
+      if (state.locationSharingEnabled) {
+        await stopLocationSharing();
+      } else {
+        await startLocationSharing();
+      }
+    } catch (err) {
+      showMessage(locationShareStatus, err.message, true);
+    }
+  });
+
+  friendLocationSelect.addEventListener('change', async () => {
+    const friendId = friendLocationSelect.value;
+    await fetchFriendLocation(friendId);
+  });
+
+  refreshFriendLocationBtn.addEventListener('click', async () => {
+    await fetchFriendLocation(friendLocationSelect.value);
+  });
+
   dreamDate.addEventListener('change', async () => {
     await loadDreamsForDate(dreamDate.value);
     state.selectedCalendarDate = dreamDate.value;
@@ -753,6 +967,12 @@ function attachEvents() {
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'friends') {
         await loadFriendsData();
+        if (friendLocationSelect.value) {
+          await fetchFriendLocation(friendLocationSelect.value);
+        }
+        startFriendLocationPolling();
+      } else {
+        stopFriendLocationPolling();
       }
     });
   });

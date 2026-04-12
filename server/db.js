@@ -89,6 +89,16 @@ export async function getDb() {
       FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (addressee_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS friend_locations (
+      user_id INTEGER PRIMARY KEY,
+      latitude REAL,
+      longitude REAL,
+      accuracy REAL,
+      is_sharing INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   return db;
