@@ -31,6 +31,20 @@ App web em JavaScript para diario e monitoramento de sonhos.
 - O `deviceId` e validado em cada requisicao autenticada
 - Para producao, recomenda-se HTTPS e cookies seguros
 
+## Persistencia de dados em producao
+Se os dados somem a cada deploy, o motivo mais comum e banco SQLite salvo em disco temporario do container.
+
+Este projeto agora suporta caminho configuravel via `DB_PATH`.
+
+- Local: usa `soninhos.db` na raiz do projeto
+- Producao (Render): configure `DB_PATH=/var/data/soninhos.db` e monte um disco persistente em `/var/data`
+
+No `render.yaml` ja foi adicionado volume persistente + `DB_PATH`.
+
+Importante:
+- Em alguns planos gratuitos o disco persistente pode nao estar disponivel.
+- Se seu plano nao suportar disco, use um banco gerenciado (Postgres/Supabase/Neon) para nao perder login e dados.
+
 ## Preview com link publico
 Como existe backend (auth + banco), o ideal e usar:
 - Render ou Railway para publicar tudo

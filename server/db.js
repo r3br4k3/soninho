@@ -1,14 +1,25 @@
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, "..", "soninhos.db");
+const defaultDbPath = path.join(__dirname, "..", "soninhos.db");
+const dbPath = process.env.DB_PATH || defaultDbPath;
+
+function ensureDbDirectoryExists(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
 
 export async function getDb() {
+  ensureDbDirectoryExists(dbPath);
+
   const db = await open({
     filename: dbPath,
     driver: sqlite3.Database
