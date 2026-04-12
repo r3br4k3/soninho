@@ -348,7 +348,7 @@ h4 {
   border: none;
   border-radius: 999px;
   padding: 10px;
-  background: #e7dfff;
+  background: #ada2cd;
   cursor: pointer;
 }
 
@@ -373,9 +373,22 @@ input,
 textarea,
 select {
   border-radius: 12px;
-  border: 1px solid #cec1f6;
+  border: 1px solid #c2a8f8;
   padding: 10px 12px;
-  background: #fefcff;
+  background: #e9ddff;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #a986f0;
+  box-shadow: 0 0 0 3px rgba(169, 134, 240, 0.3);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7a5ac6;
 }
 
 .btn-primary,
