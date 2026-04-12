@@ -316,14 +316,16 @@ h4 {
 
 .subtitle {
   max-width: 44ch;
-  color: var(--muted);
+  color: #d8c1ff;
+  text-shadow: 0 1px 2px rgba(34, 22, 74, 0.55);
 }
 
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.18em;
   font-size: 0.72rem;
-  color: var(--muted);
+  color: #c9adff;
+  text-shadow: 0 1px 2px rgba(34, 22, 74, 0.5);
 }
 
 .card {
