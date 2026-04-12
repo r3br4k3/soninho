@@ -9,6 +9,9 @@
     <link rel="apple-touch-icon" href="/icone.ico" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Orbitron:wght@600&family=Playfair+Display:ital,wght@0,600;1,500&family=Courier+Prime&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div class="stars-layer stars-back"></div>
@@ -80,6 +83,7 @@
         <div>
           <p class="eyebrow">bem-vindo(a)</p>
           <h2 id="welcomeName">SONHADOR(A)</h2>
+          <p id="soninhosBalance" class="soninhos-balance">✨ 0 soninhos</p>
         </div>
         <button id="logoutBtn" class="btn-ghost">Sair</button>
       </header>
@@ -246,6 +250,22 @@
             <div id="friendsList" class="friend-list"></div>
           </div>
         </section>
+
+        <section id="tab-shop" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Loja dos Sonhos</h3>
+            <p class="shop-balance-header">Seu saldo: <span id="shopBalanceDisplay" class="shop-balance-value">✨ 0</span> soninhos</p>
+          </div>
+
+          <div class="shop-category-tabs">
+            <button class="shop-cat-btn active" data-cat="all">Tudo</button>
+            <button class="shop-cat-btn" data-cat="font">Fontes</button>
+            <button class="shop-cat-btn" data-cat="tag_effect">Efeitos de Tags</button>
+          </div>
+
+          <div id="shopGrid" class="shop-grid"></div>
+          <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
+        </section>
       </main>
 
       <nav class="bottom-nav card">
@@ -255,6 +275,7 @@
         <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
         <button class="nav-btn" data-tab="reminders" title="Lembretes">⏰<span>Lembretes</span></button>
         <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
+        <button class="nav-btn" data-tab="shop" title="Loja">🛍️<span>Loja</span></button>
       </nav>
     </div>
 

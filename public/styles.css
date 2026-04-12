@@ -732,7 +732,7 @@ textarea::placeholder {
   transform: translateX(-50%);
   width: min(980px, 92vw);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   padding: 8px;
   backdrop-filter: blur(8px);
 }
@@ -786,4 +786,231 @@ textarea::placeholder {
     padding-bottom: 110px;
     overscroll-behavior: contain;
   }
+}
+
+/* ─── SALDO DE SONINHOS ──────────────────────────────────────────────────── */
+
+.soninhos-balance {
+  font-size: 0.75rem;
+  color: #e0cfff;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
+/* ─── LOJA DOS SONHOS ────────────────────────────────────────────────────── */
+
+.shop-balance-header {
+  font-size: 0.85rem;
+  color: #c9adff;
+  margin: 0;
+}
+
+.shop-balance-value {
+  font-weight: 700;
+  color: #f0e0ff;
+}
+
+.shop-category-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 8px;
+  flex-wrap: wrap;
+}
+
+.shop-cat-btn {
+  border: 1.5px solid #9c82da;
+  background: transparent;
+  color: #c9adff;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.shop-cat-btn.active,
+.shop-cat-btn:hover {
+  background: #6b4fc8;
+  color: #fff;
+  border-color: #6b4fc8;
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.shop-item-card {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1.5px solid #8b72cc;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.shop-item-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 24px rgba(140, 100, 220, 0.35);
+}
+
+.shop-item-card.shop-item-owned {
+  border-color: #7bc67e;
+}
+
+.shop-item-card.shop-item-equipped {
+  border-color: #f5c542;
+  box-shadow: 0 0 12px rgba(245, 197, 66, 0.45);
+}
+
+.shop-item-preview {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+}
+
+.shop-preview-tag {
+  font-size: 0.85rem;
+}
+
+.shop-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.shop-category-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b4a4ff;
+  background: rgba(127, 110, 220, 0.2);
+  border-radius: 999px;
+  padding: 2px 8px;
+  align-self: flex-start;
+}
+
+.shop-item-name {
+  font-size: 1rem;
+  color: #f0e0ff;
+}
+
+.shop-item-desc {
+  font-size: 0.8rem;
+  color: #c9adff;
+  margin: 0;
+}
+
+.shop-item-price {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e0cfff;
+  margin: 0;
+}
+
+.shop-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.shop-buy-btn {
+  width: 100%;
+}
+
+/* ─── EFEITOS DE FONTE (aplicados via classe no body) ────────────────────── */
+
+body.font-dancing #dreamContent {
+  font-family: 'Dancing Script', cursive;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+body.font-orbitron #dreamContent {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+}
+
+body.font-playfair #dreamContent {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+body.font-courier #dreamContent {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.95rem;
+}
+
+/* Preview da fonte nos cards da loja */
+.shop-item-preview.font-dancing  { font-family: 'Dancing Script', cursive; }
+.shop-item-preview.font-orbitron { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; }
+.shop-item-preview.font-playfair { font-family: 'Playfair Display', serif; font-style: italic; }
+.shop-item-preview.font-courier  { font-family: 'Courier Prime', monospace; }
+
+/* ─── EFEITOS DE TAGS (aplicados via classe no body) ─────────────────────── */
+
+body.tag-neon-pink .tag-chip,
+.tag-chip.tag-neon-pink {
+  background: #ff2d78 !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 0 6px #ff2d78, 0 0 16px rgba(255, 45, 120, 0.5);
+  text-shadow: 0 0 6px #fff;
+}
+
+body.tag-neon-blue .tag-chip,
+.tag-chip.tag-neon-blue {
+  background: #00b4ff !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 0 6px #00b4ff, 0 0 16px rgba(0, 180, 255, 0.5);
+  text-shadow: 0 0 6px #fff;
+}
+
+body.tag-neon-green .tag-chip,
+.tag-chip.tag-neon-green {
+  background: #00e676 !important;
+  color: #002b0f !important;
+  border: none !important;
+  box-shadow: 0 0 6px #00e676, 0 0 16px rgba(0, 230, 118, 0.5);
+}
+
+body.tag-gold .tag-chip,
+.tag-chip.tag-gold {
+  background: linear-gradient(135deg, #f5c542, #e09800) !important;
+  color: #3a2500 !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(245, 197, 66, 0.55);
+  font-weight: 700;
+}
+
+@keyframes rgbCycle {
+  0%   { background: #ff0080; box-shadow: 0 0 8px #ff0080; }
+  20%  { background: #a000ff; box-shadow: 0 0 8px #a000ff; }
+  40%  { background: #0050ff; box-shadow: 0 0 8px #0050ff; }
+  60%  { background: #00e0c0; box-shadow: 0 0 8px #00e0c0; }
+  80%  { background: #80ff00; box-shadow: 0 0 8px #80ff00; }
+  100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; }
+}
+
+body.tag-rgb .tag-chip,
+.tag-chip.tag-rgb {
+  animation: rgbCycle 3s linear infinite !important;
+  color: #fff !important;
+  border: none !important;
+  text-shadow: 0 0 4px rgba(0,0,0,0.5);
 }

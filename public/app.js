@@ -25,7 +25,11 @@ const state = {
   selectedOwnerId: 'me',
   locationSharingEnabled: false,
   locationWatchId: null,
-  friendLocationPollId: null
+  friendLocationPollId: null,
+  soninhos: 0,
+  shopItems: [],
+  equipped: { active_font: null, active_tag_effect: null },
+  shopFilter: 'all',
 };
 
 const authView = document.getElementById('authView');
@@ -70,6 +74,10 @@ const friendLocationSelect = document.getElementById('friendLocationSelect');
 const refreshFriendLocationBtn = document.getElementById('refreshFriendLocationBtn');
 const friendLocationView = document.getElementById('friendLocationView');
 const friendLocationStatusList = document.getElementById('friendLocationStatusList');
+const soninhosBalance = document.getElementById('soninhosBalance');
+const shopGrid = document.getElementById('shopGrid');
+const shopMessage = document.getElementById('shopMessage');
+const shopBalanceDisplay = document.getElementById('shopBalanceDisplay');
 
 async function hashText(text) {
   const data = new TextEncoder().encode(text);
@@ -807,6 +815,164 @@ function activateTab(tabName) {
   document.querySelector(`.nav-btn[data-tab="${tabName}"]`).classList.add('active');
 }
 
+// ─── LOJA DOS SONHOS ─────────────────────────────────────────────────────────
+
+function updateSoninhosDisplay() {
+  const txt = `✨ ${state.soninhos} soninhos`;
+  if (soninhosBalance) soninhosBalance.textContent = txt;
+  if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${state.soninhos}`;
+}
+
+function applyEquipped() {
+  // Remove todas as classes de efeito anteriores do body
+  Array.from(document.body.classList).forEach((cls) => {
+    if (cls.startsWith('font-') || cls.startsWith('tag-')) {
+      document.body.classList.remove(cls);
+    }
+  });
+
+  const fontItem = state.shopItems.find((i) => i.id === state.equipped.active_font);
+  const tagItem = state.shopItems.find((i) => i.id === state.equipped.active_tag_effect);
+  if (fontItem) document.body.classList.add(fontItem.effect_class);
+  if (tagItem) document.body.classList.add(tagItem.effect_class);
+}
+
+const CATEGORY_LABELS = { font: 'Fonte', tag_effect: 'Efeito de Tag' };
+
+function renderShop() {
+  shopGrid.innerHTML = '';
+  const filtered = state.shopFilter === 'all'
+    ? state.shopItems
+    : state.shopItems.filter((i) => i.category === state.shopFilter);
+
+  if (!filtered.length) {
+    shopGrid.innerHTML = '<p style="text-align:center;color:#c9adff">Nenhum item nesta categoria.</p>';
+    return;
+  }
+
+  filtered.forEach((item) => {
+    const card = document.createElement('article');
+    card.className = `shop-item-card${item.owned ? ' shop-item-owned' : ''}${item.equipped ? ' shop-item-equipped' : ''}`;
+
+    const preview = document.createElement('div');
+    preview.className = 'shop-item-preview';
+    if (item.category === 'font') {
+      preview.classList.add(item.effect_class);
+      preview.textContent = 'Abc';
+    } else {
+      preview.innerHTML = `<span class="tag-chip shop-preview-tag ${item.effect_class}">#sonho</span>`;
+    }
+
+    const info = document.createElement('div');
+    info.className = 'shop-item-info';
+
+    const badge = document.createElement('span');
+    badge.className = 'shop-category-badge';
+    badge.textContent = CATEGORY_LABELS[item.category] || item.category;
+
+    const name = document.createElement('strong');
+    name.className = 'shop-item-name';
+    name.textContent = item.name;
+
+    const desc = document.createElement('p');
+    desc.className = 'shop-item-desc';
+    desc.textContent = item.description;
+
+    const price = document.createElement('p');
+    price.className = 'shop-item-price';
+    price.textContent = item.owned ? '✅ Adquirido' : `✨ ${item.price} soninhos`;
+
+    info.appendChild(badge);
+    info.appendChild(name);
+    info.appendChild(desc);
+    info.appendChild(price);
+
+    const actions = document.createElement('div');
+    actions.className = 'shop-item-actions';
+
+    if (!item.owned) {
+      const buyBtn = document.createElement('button');
+      buyBtn.type = 'button';
+      buyBtn.className = 'btn-primary shop-buy-btn';
+      buyBtn.textContent = 'Comprar';
+      buyBtn.addEventListener('click', () => buyItem(item));
+      actions.appendChild(buyBtn);
+    } else if (item.equipped) {
+      const unequipBtn = document.createElement('button');
+      unequipBtn.type = 'button';
+      unequipBtn.className = 'btn-ghost';
+      unequipBtn.textContent = 'Remover';
+      unequipBtn.addEventListener('click', () => unequipItem(item));
+      actions.appendChild(unequipBtn);
+    } else {
+      const equipBtn = document.createElement('button');
+      equipBtn.type = 'button';
+      equipBtn.className = 'btn-primary';
+      equipBtn.textContent = 'Usar';
+      equipBtn.addEventListener('click', () => equipItem(item));
+      actions.appendChild(equipBtn);
+    }
+
+    card.appendChild(preview);
+    card.appendChild(info);
+    card.appendChild(actions);
+    shopGrid.appendChild(card);
+  });
+}
+
+async function loadShopData() {
+  try {
+    const [balanceData, shopData] = await Promise.all([
+      api('/api/shop/balance'),
+      api('/api/shop/items'),
+    ]);
+    state.soninhos = balanceData.balance ?? 0;
+    state.shopItems = shopData.items || [];
+    state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null };
+    updateSoninhosDisplay();
+    applyEquipped();
+    renderShop();
+  } catch {
+    // silencioso
+  }
+}
+
+async function buyItem(item) {
+  try {
+    const result = await api(`/api/shop/buy/${encodeURIComponent(item.id)}`, { method: 'POST' });
+    state.soninhos = result.newBalance;
+    showMessage(shopMessage, `Voce comprou "${item.name}"! Saldo: ✨ ${result.newBalance} soninhos.`);
+    await loadShopData();
+  } catch (err) {
+    showMessage(shopMessage, err.message, true);
+  }
+}
+
+async function equipItem(item) {
+  try {
+    await api(`/api/shop/equip/${encodeURIComponent(item.id)}`, { method: 'POST' });
+    await loadShopData();
+    showMessage(shopMessage, `"${item.name}" ativado!`);
+  } catch (err) {
+    showMessage(shopMessage, err.message, true);
+  }
+}
+
+async function unequipItem(item) {
+  try {
+    await api('/api/shop/unequip', {
+      method: 'POST',
+      body: JSON.stringify({ category: item.category }),
+    });
+    await loadShopData();
+    showMessage(shopMessage, `"${item.name}" removido.`);
+  } catch (err) {
+    showMessage(shopMessage, err.message, true);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function bootstrapAppData() {
   try {
     await loadFriendsData();
@@ -815,6 +981,7 @@ async function bootstrapAppData() {
     await loadDreamsForDate(state.currentDate);
     await renderCalendar();
     await loadStats();
+    await loadShopData();
   } catch (err) {
     showMessage(dreamMessage, err.message, true);
   }
@@ -981,17 +1148,19 @@ function attachEvents() {
         tagIds: readSelectedTagIds()
       };
 
-      await api('/api/dreams', {
+      const result = await api('/api/dreams', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
 
       dreamForm.reset();
       dreamDate.value = state.selectedCalendarDate;
-      showMessage(dreamMessage, 'Sonho salvo com sucesso.');
+      const earned = result.soninhosEarned ?? 0;
+      showMessage(dreamMessage, `Sonho salvo! Voce ganhou ✨ ${earned} soninhos.`);
       await loadDreamsForDate(state.selectedCalendarDate);
       await renderCalendar();
       await loadStats();
+      await loadShopData();
     } catch (err) {
       showMessage(dreamMessage, err.message, true);
     }
@@ -1048,6 +1217,7 @@ function attachEvents() {
       activateTab(tab);
       if (tab === 'stats') await loadStats();
       if (tab === 'calendar') await renderCalendar();
+      if (tab === 'shop') await loadShopData();
       if (tab === 'friends') {
         await loadFriendsData();
         if (friendLocationSelect.value) {
@@ -1079,6 +1249,15 @@ function attachEvents() {
     } catch (err) {
       showMessage(reminderMessage, err.message, true);
     }
+  });
+
+  document.querySelectorAll('.shop-cat-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.shop-cat-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.shopFilter = btn.dataset.cat;
+      renderShop();
+    });
   });
 }
 

@@ -475,7 +475,8 @@ app.post("/api/dreams", authMiddleware, async (req, res) => {
     [req.user.id, title, content, mood || null, date, isImportant ? 1 : 0]
   );
 
-  if (Array.isArray(tagIds) && tagIds.length) {
+  const tagCount = Array.isArray(tagIds) ? tagIds.length : 0;
+  if (tagCount) {
     for (const tagId of tagIds) {
       await db.run(
         "INSERT OR IGNORE INTO dream_tags (dream_id, tag_id) VALUES (?, ?)",
@@ -484,8 +485,16 @@ app.post("/api/dreams", authMiddleware, async (req, res) => {
     }
   }
 
+  // Recompensa em Soninhos
+  const wordCount = content.trim().split(/\s+/).length;
+  let earned = 3;
+  if (wordCount > 100) earned += 2;
+  earned += Math.min(tagCount, 3);
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance + ? WHERE id = ?", [earned, req.user.id]);
+
   const created = await db.get("SELECT * FROM dreams WHERE id = ?", [result.lastID]);
-  return res.status(201).json({ dream: created });
+  const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.status(201).json({ dream: created, soninhosEarned: earned, soninhosBalance: userAfter.soninhos_balance });
 });
 
 app.get("/api/stats", authMiddleware, async (req, res) => {
@@ -540,6 +549,111 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
 
   return res.json({ totals, byMood, topTags, byMonth, ownerId });
 });
+
+// ─── LOJA DOS SONHOS ─────────────────────────────────────────────────────────
+
+app.get("/api/shop/balance", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ balance: user?.soninhos_balance ?? 0 });
+});
+
+app.get("/api/shop/items", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const items = await db.all("SELECT * FROM shop_items ORDER BY category, price");
+  const purchases = await db.all("SELECT item_id FROM user_purchases WHERE user_id = ?", [req.user.id]);
+  const purchasedSet = new Set(purchases.map((p) => p.item_id));
+  const equipped = await db.get("SELECT * FROM user_equipped WHERE user_id = ?", [req.user.id]);
+
+  return res.json({
+    items: items.map((item) => ({
+      ...item,
+      owned: purchasedSet.has(item.id),
+      equipped: equipped?.active_font === item.id || equipped?.active_tag_effect === item.id,
+    })),
+    equipped: {
+      active_font: equipped?.active_font || null,
+      active_tag_effect: equipped?.active_tag_effect || null,
+    },
+  });
+});
+
+app.post("/api/shop/buy/:itemId", authMiddleware, async (req, res) => {
+  const { itemId } = req.params;
+  const db = await getDb();
+
+  const item = await db.get("SELECT * FROM shop_items WHERE id = ?", [itemId]);
+  if (!item) return res.status(404).json({ message: "Item nao encontrado" });
+
+  const alreadyOwned = await db.get(
+    "SELECT 1 FROM user_purchases WHERE user_id = ? AND item_id = ?",
+    [req.user.id, itemId]
+  );
+  if (alreadyOwned) return res.status(400).json({ message: "Voce ja possui este item" });
+
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  if ((user?.soninhos_balance ?? 0) < item.price) {
+    return res.status(400).json({
+      message: `Soninhos insuficientes. Voce tem ${user?.soninhos_balance ?? 0}, precisa de ${item.price}`,
+    });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [item.price, req.user.id]);
+  await db.run("INSERT INTO user_purchases (user_id, item_id) VALUES (?,?)", [req.user.id, itemId]);
+
+  const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ success: true, newBalance: userAfter.soninhos_balance });
+});
+
+app.post("/api/shop/equip/:itemId", authMiddleware, async (req, res) => {
+  const { itemId } = req.params;
+  const db = await getDb();
+
+  const item = await db.get("SELECT * FROM shop_items WHERE id = ?", [itemId]);
+  if (!item) return res.status(404).json({ message: "Item nao encontrado" });
+
+  const owned = await db.get(
+    "SELECT 1 FROM user_purchases WHERE user_id = ? AND item_id = ?",
+    [req.user.id, itemId]
+  );
+  if (!owned) return res.status(403).json({ message: "Voce nao possui este item" });
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect) VALUES (?, NULL, NULL)",
+    [req.user.id]
+  );
+
+  if (item.category === "font") {
+    await db.run("UPDATE user_equipped SET active_font = ? WHERE user_id = ?", [itemId, req.user.id]);
+  } else if (item.category === "tag_effect") {
+    await db.run("UPDATE user_equipped SET active_tag_effect = ? WHERE user_id = ?", [itemId, req.user.id]);
+  }
+
+  return res.json({ success: true });
+});
+
+app.post("/api/shop/unequip", authMiddleware, async (req, res) => {
+  const { category } = req.body;
+  if (!["font", "tag_effect"].includes(category)) {
+    return res.status(400).json({ message: "Categoria invalida" });
+  }
+
+  const db = await getDb();
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect) VALUES (?, NULL, NULL)",
+    [req.user.id]
+  );
+
+  if (category === "font") {
+    await db.run("UPDATE user_equipped SET active_font = NULL WHERE user_id = ?", [req.user.id]);
+  } else {
+    await db.run("UPDATE user_equipped SET active_tag_effect = NULL WHERE user_id = ?", [req.user.id]);
+  }
+
+  return res.json({ success: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));

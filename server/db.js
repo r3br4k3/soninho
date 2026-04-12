@@ -99,7 +99,58 @@ export async function getDb() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS shop_items (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      effect_class TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS user_purchases (
+      user_id INTEGER NOT NULL,
+      item_id TEXT NOT NULL,
+      purchased_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, item_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_equipped (
+      user_id INTEGER PRIMARY KEY,
+      active_font TEXT DEFAULT NULL,
+      active_tag_effect TEXT DEFAULT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
+
+  // Adiciona coluna soninhos_balance se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE users ADD COLUMN soninhos_balance INTEGER DEFAULT 0');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Popula itens da loja (INSERT OR IGNORE para nao duplicar)
+  const shopItems = [
+    ['font_dancing',  'Sonhadora',        'Letra cursiva e elegante para seus sonhos',   'font',       50,  'font-dancing'],
+    ['font_orbitron', 'Galatica',         'Fonte espacial futurista',                    'font',       80,  'font-orbitron'],
+    ['font_playfair', 'Poetica',          'Serifa classica e refinada',                  'font',       60,  'font-playfair'],
+    ['font_courier',  'Maquina do Tempo', 'Monospace estilo retro',                      'font',       40,  'font-courier'],
+    ['tag_neon_pink', 'Tags Neon Rosa',   'Brilho neon rosa nas suas tags',              'tag_effect', 70,  'tag-neon-pink'],
+    ['tag_neon_blue', 'Tags Neon Azul',   'Brilho neon azul nas suas tags',              'tag_effect', 70,  'tag-neon-blue'],
+    ['tag_neon_green','Tags Neon Verde',  'Brilho neon verde nas suas tags',             'tag_effect', 70,  'tag-neon-green'],
+    ['tag_gold',      'Tags Douradas',    'Gradiente dourado para suas tags',            'tag_effect', 100, 'tag-gold'],
+    ['tag_rgb',       'Tags RGB',         'Efeito arco-iris animado nas suas tags',      'tag_effect', 150, 'tag-rgb'],
+  ];
+
+  for (const [id, name, description, category, price, effect_class] of shopItems) {
+    await db.run(
+      'INSERT OR IGNORE INTO shop_items (id, name, description, category, price, effect_class) VALUES (?,?,?,?,?,?)',
+      [id, name, description, category, price, effect_class]
+    );
+  }
 
   return db;
 }
