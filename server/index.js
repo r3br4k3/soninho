@@ -14,6 +14,18 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "troque-por-uma-chave-segura";
 
 app.use(express.json());
+
+// Evita assets desatualizados em deploy automatico (principalmente no mobile/PWA).
+app.use((req, res, next) => {
+  const noCacheTargets = ["/", "/index.html", "/app.js", "/styles.css", "/sw.js", "/manifest.webmanifest"];
+  if (noCacheTargets.includes(req.path)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
 app.use(express.static(publicDir));
 
 function getTokenFromHeader(req) {
