@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#5d4ca8" />
+    <title>SONINHOS</title>
+    <link rel="icon" type="image/x-icon" href="/icone.ico" />
+    <link rel="apple-touch-icon" href="/icone.ico" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Orbitron:wght@600&family=Playfair+Display:ital,wght@0,600;1,500&family=Courier+Prime&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="stars-layer stars-back"></div>
+    <div class="stars-layer stars-front"></div>
+    <div class="sparkles-layer" aria-hidden="true">
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+      <span class="sparkle"></span>
+    </div>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <div id="authView" class="auth-shell">
+      <div class="brand-panel">
+        <p class="eyebrow">monitoramento de sonhos</p>
+        <h1>SONINHOS</h1>
+        <p class="subtitle">Seu diario inteligente para registrar sonhos, encontrar padroes e destacar dias importantes.</p>
+      </div>
+
+      <div class="card auth-card">
+        <div class="auth-tabs">
+          <button id="tabLogin" class="active">Entrar</button>
+          <button id="tabRegister">Criar conta</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>Email</label>
+          <input type="email" id="loginEmail" required />
+          <label>Senha</label>
+          <input type="password" id="loginPassword" required />
+          <button type="submit" class="btn-primary">Entrar</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <label>Nome</label>
+          <input type="text" id="registerName" required />
+          <label>Email</label>
+          <input type="email" id="registerEmail" required />
+          <label>Senha</label>
+          <input type="password" id="registerPassword" minlength="6" required />
+          <button type="submit" class="btn-primary">Criar conta</button>
+        </form>
+
+        <p id="authMessage" class="message"></p>
+      </div>
+    </div>
+
+    <div id="appView" class="app-shell hidden">
+      <header class="topbar card">
+        <div>
+          <p class="eyebrow">bem-vindo(a)</p>
+          <h2 id="welcomeName">SONHADOR(A)</h2>
+          <p id="soninhosBalance" class="soninhos-balance">✨ 0 soninhos</p>
+        </div>
+        <button id="logoutBtn" class="btn-ghost">Sair</button>
+      </header>
+
+      <main class="content">
+        <section id="tab-journal" class="tab-panel active">
+          <div class="card panel-head">
+            <h3>Diario dos Sonhos</h3>
+            <div class="panel-controls">
+              <select id="journalOwnerSelect"></select>
+              <input type="date" id="dreamDate" />
+            </div>
+          </div>
+
+          <div class="card">
+            <form id="dreamForm" class="dream-form">
+              <label>Como foi?</label>
+              <textarea id="dreamContent" rows="5" required></textarea>
+
+              <label>Humor ao acordar</label>
+              <select id="dreamMood">
+                <option value="">Selecione</option>
+                <option value="feliz">Feliz</option>
+                <option value="ansioso">Ansioso</option>
+                <option value="calmo">Calmo</option>
+                <option value="confuso">Confuso</option>
+                <option value="medo">Medo</option>
+              </select>
+
+              <div>
+                <p class="small-title">Tags do sonho</p>
+                <div id="dreamTagChecklist" class="tag-checklist"></div>
+              </div>
+
+              <label class="toggle-line">
+                <input type="checkbox" id="isImportant" />
+                Marcar como sonho importante
+              </label>
+
+              <button type="submit" class="btn-primary">Salvar sonho</button>
+            </form>
+            <p id="dreamMessage" class="message"></p>
+          </div>
+
+          <div class="card">
+            <h4>Registros do dia</h4>
+            <div id="dreamList" class="dream-list"></div>
+          </div>
+        </section>
+
+        <section id="tab-calendar" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Calendario de Sonhos</h3>
+            <div class="calendar-nav">
+              <button id="prevMonth" class="btn-ghost">Mes anterior</button>
+              <strong id="calendarTitle"></strong>
+              <button id="nextMonth" class="btn-ghost">Proximo mes</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+        </section>
+
+        <section id="tab-tags" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Gerenciador de Tags</h3>
+          </div>
+          <div class="card">
+            <form id="tagForm" class="inline-form">
+              <input type="text" id="tagName" placeholder="Nome da tag" required />
+              <input type="color" id="tagColor" value="#7f6edc" />
+              <button type="submit" class="btn-primary">Criar</button>
+            </form>
+            <div id="tagList" class="tag-list"></div>
+            <p id="tagMessage" class="message"></p>
+          </div>
+        </section>
+
+        <section id="tab-stats" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Estatisticas</h3>
+          </div>
+          <div class="stats-grid">
+            <article class="card stat-card">
+              <p>Total de sonhos</p>
+              <strong id="totalDreams">0</strong>
+            </article>
+            <article class="card stat-card">
+              <p>Sonhos importantes</p>
+              <strong id="importantDreams">0</strong>
+            </article>
+          </div>
+          <div class="card">
+            <h4>Top Tags</h4>
+            <ul id="topTags"></ul>
+          </div>
+          <div class="card">
+            <h4>Sonhos por mes</h4>
+            <div id="monthBars" class="bars"></div>
+          </div>
+        </section>
+
+        <section id="tab-reminders" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Lembretes</h3>
+          </div>
+          <div class="card">
+            <p>Ative notificacoes para lembrar de registrar o sonho ao acordar.</p>
+            <form id="reminderForm" class="inline-form">
+              <input type="time" id="reminderTime" required />
+              <button type="submit" class="btn-primary">Ativar lembrete diario</button>
+            </form>
+            <button id="testReminderBtn" class="btn-ghost">Testar notificacao</button>
+            <p id="reminderMessage" class="message"></p>
+          </div>
+        </section>
+
+        <section id="tab-friends" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Amigos</h3>
+          </div>
+
+          <div class="card">
+            <h4>Localizacao em tempo real</h4>
+            <p>Compartilhe sua localizacao e acompanhe onde seus amigos estao.</p>
+            <div class="inline-form">
+              <button id="locationShareBtn" type="button" class="btn-primary">Ativar compartilhamento</button>
+            </div>
+            <p id="locationShareStatus" class="message"></p>
+
+            <div class="inline-form">
+              <select id="friendLocationSelect"></select>
+              <button id="refreshFriendLocationBtn" type="button" class="btn-ghost">Atualizar localizacao</button>
+            </div>
+
+            <div class="location-legend">
+              <span class="status-pill status-on">Verde: compartilhando</span>
+              <span class="status-pill status-off">Vermelho: nao compartilhando</span>
+            </div>
+
+            <div id="friendLocationStatusList" class="friend-list"></div>
+
+            <div id="friendLocationView" class="location-view">Selecione um amigo para ver a localizacao em tempo real.</div>
+          </div>
+
+          <div class="card">
+            <h4>Adicionar amigo</h4>
+            <form id="friendSearchForm" class="inline-form">
+              <input type="text" id="friendQuery" placeholder="Digite nome ou email" required />
+              <button type="submit" class="btn-primary">Buscar</button>
+            </form>
+            <div id="friendSearchResults" class="friend-list"></div>
+            <p id="friendMessage" class="message"></p>
+          </div>
+
+          <div class="card">
+            <h4>Pedidos recebidos</h4>
+            <div id="incomingRequests" class="friend-list"></div>
+          </div>
+
+          <div class="card">
+            <h4>Meus amigos</h4>
+            <div id="friendsList" class="friend-list"></div>
+          </div>
+        </section>
+
+        <section id="tab-shop" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Loja dos Sonhos</h3>
+            <p class="shop-balance-header">Seu saldo: <span id="shopBalanceDisplay" class="shop-balance-value">✨ 0</span> soninhos</p>
+          </div>
+
+          <div class="shop-category-tabs">
+            <button class="shop-cat-btn active" data-cat="all">Tudo</button>
+            <button class="shop-cat-btn" data-cat="font">Fontes</button>
+            <button class="shop-cat-btn" data-cat="tag_effect">Efeitos de Tags</button>
+            <button class="shop-cat-btn" data-cat="wallpaper">Wallpapers</button>
+          </div>
+
+          <div id="shopWallpaperCard" class="card shop-wallpaper-card hidden">
+            <h4>Wallpaper Personalizado</h4>
+            <p class="shop-wallpaper-help">Use qualquer URL de imagem valida. Cada troca custa <strong>✨ 200 soninhos</strong>.</p>
+            <form id="customWallpaperForm" class="inline-form shop-wallpaper-form">
+              <input type="text" id="customWallpaperUrl" placeholder="https://site.com/imagem.jpg" required />
+              <button type="submit" class="btn-primary">Aplicar por 200</button>
+              <button type="button" id="removeCustomWallpaperBtn" class="btn-ghost">Remover wallpaper</button>
+            </form>
+            <p id="customWallpaperStatus" class="message"></p>
+            <div id="customWallpaperList" class="shop-wallpaper-list"></div>
+          </div>
+
+          <div id="shopAdminPanel" class="card shop-admin-card hidden">
+            <h4>Painel Admin</h4>
+            <p class="shop-wallpaper-help">Gerencie contas, soninhos e itens comprados.</p>
+
+            <div class="shop-admin-grid">
+              <label for="adminUserSelect">Conta</label>
+              <select id="adminUserSelect"></select>
+
+              <label for="adminCoinsAmount">Valor de soninhos</label>
+              <input type="number" id="adminCoinsAmount" min="1" value="100" />
+            </div>
+
+            <div class="shop-admin-actions">
+              <button type="button" id="adminAddCoinsBtn" class="btn-primary">Adicionar soninhos</button>
+              <button type="button" id="adminRemoveCoinsBtn" class="btn-ghost">Remover soninhos</button>
+            </div>
+
+            <div class="shop-admin-grid">
+              <label for="adminItemSelect">Item da loja</label>
+              <select id="adminItemSelect"></select>
+            </div>
+
+            <div class="shop-admin-actions">
+              <button type="button" id="adminTogglePurchaseBtn" class="btn-primary">Alternar comprado</button>
+              <span id="adminPurchaseState" class="shop-admin-state"></span>
+            </div>
+
+            <p id="adminStatus" class="message"></p>
+
+            <h5>Contas registradas</h5>
+            <div id="adminAccountsList" class="friend-list"></div>
+          </div>
+
+          <div id="shopGrid" class="shop-grid"></div>
+          <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
+        </section>
+      </main>
+
+      <nav class="bottom-nav card">
+        <button class="nav-btn active" data-tab="journal" title="Diario">📝<span>Diario</span></button>
+        <button class="nav-btn" data-tab="calendar" title="Calendario">🗓️<span>Calendario</span></button>
+        <button class="nav-btn" data-tab="tags" title="Tags">🏷️<span>Tags</span></button>
+        <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
+        <button class="nav-btn" data-tab="reminders" title="Lembretes">⏰<span>Lembretes</span></button>
+        <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
+        <button class="nav-btn" data-tab="shop" title="Loja">🛍️<span>Loja</span></button>
+      </nav>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
