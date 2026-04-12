@@ -375,22 +375,22 @@ input,
 textarea,
 select {
   border-radius: 12px;
-  border: 1px solid #c2a8f8;
+  border: 1px solid #ad87f2;
   padding: 10px 12px;
-  background: #e9ddff;
+  background: #dbc4ff;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: #a986f0;
-  box-shadow: 0 0 0 3px rgba(169, 134, 240, 0.3);
+  border-color: #8f61eb;
+  box-shadow: 0 0 0 3px rgba(143, 97, 235, 0.35);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #7a5ac6;
+  color: #6943bc;
 }
 
 .btn-primary,
