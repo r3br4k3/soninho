@@ -285,7 +285,23 @@
             <button class="shop-cat-btn active" data-cat="all">Tudo</button>
             <button class="shop-cat-btn" data-cat="font">Fontes</button>
             <button class="shop-cat-btn" data-cat="tag_effect">Efeitos de Tags</button>
+            <button class="shop-cat-btn" data-cat="theme">Cor do site</button>
             <button class="shop-cat-btn" data-cat="wallpaper">Wallpapers</button>
+          </div>
+
+          <div id="shopThemeCard" class="card shop-wallpaper-card hidden">
+            <h4>Cor Personalizada do Site</h4>
+            <p class="shop-wallpaper-help">Escolha uma cor na roda. Cada nova aplicacao custa <strong>✨ 120 soninhos</strong>.</p>
+            <form id="customThemeForm" class="inline-form shop-wallpaper-form">
+              <input type="color" id="customThemeColor" value="#7f6edc" />
+              <button type="submit" class="btn-primary">Aplicar por 120</button>
+              <button type="button" id="removeCustomThemeBtn" class="btn-ghost">Restaurar tema padrao</button>
+            </form>
+            <p id="customThemeStatus" class="message"></p>
+            <div class="shop-theme-preview-row">
+              <span class="shop-theme-swatch" id="customThemePreview"></span>
+              <small id="customThemeLabel">Tema atual: padrao</small>
+            </div>
           </div>
 
           <div id="shopWallpaperCard" class="card shop-wallpaper-card hidden">

@@ -125,6 +125,7 @@ export async function getDb() {
       active_font TEXT DEFAULT NULL,
       active_tag_effect TEXT DEFAULT NULL,
       active_wallpaper TEXT DEFAULT NULL,
+      active_theme_color TEXT DEFAULT NULL,
       active_profile_image TEXT DEFAULT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -194,6 +195,13 @@ export async function getDb() {
   // Adiciona coluna active_profile_image se ainda nao existir (migracao segura)
   try {
     await db.exec('ALTER TABLE user_equipped ADD COLUMN active_profile_image TEXT DEFAULT NULL');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Adiciona coluna active_theme_color se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE user_equipped ADD COLUMN active_theme_color TEXT DEFAULT NULL');
   } catch {
     // coluna ja existe, sem problema
   }

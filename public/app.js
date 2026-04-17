@@ -29,7 +29,7 @@ const state = {
   soninhos: 0,
   shopItems: [],
   customWallpapers: [],
-  equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null },
+  equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null, active_theme_color: null },
   shopFilter: 'all',
   passView: 'rewards',
   pass: {
@@ -109,6 +109,13 @@ const shopGrid = document.getElementById('shopGrid');
 const shopMessage = document.getElementById('shopMessage');
 const shopBalanceDisplay = document.getElementById('shopBalanceDisplay');
 const passSoninhosDisplay = document.getElementById('passSoninhosDisplay');
+const shopThemeCard = document.getElementById('shopThemeCard');
+const customThemeForm = document.getElementById('customThemeForm');
+const customThemeColor = document.getElementById('customThemeColor');
+const customThemeStatus = document.getElementById('customThemeStatus');
+const removeCustomThemeBtn = document.getElementById('removeCustomThemeBtn');
+const customThemePreview = document.getElementById('customThemePreview');
+const customThemeLabel = document.getElementById('customThemeLabel');
 const shopWallpaperCard = document.getElementById('shopWallpaperCard');
 const customWallpaperForm = document.getElementById('customWallpaperForm');
 const customWallpaperUrl = document.getElementById('customWallpaperUrl');
@@ -1485,6 +1492,101 @@ function updateSoninhosDisplay() {
   if (passSoninhosDisplay) passSoninhosDisplay.textContent = `✨ ${state.soninhos}`;
 }
 
+function clampColorChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function hexToRgb(hex) {
+  const normalized = String(hex || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null;
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r, g, b) {
+  const toHex = (value) => clampColorChannel(value).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function mixHexColors(baseHex, mixHex, amount) {
+  const base = hexToRgb(baseHex);
+  const mix = hexToRgb(mixHex);
+  if (!base || !mix) return baseHex;
+  return rgbToHex(
+    base.r + (mix.r - base.r) * amount,
+    base.g + (mix.g - base.g) * amount,
+    base.b + (mix.b - base.b) * amount,
+  );
+}
+
+function getContrastInk(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#2f2559';
+  const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  return luminance > 0.65 ? '#2f2559' : '#f7f3ff';
+}
+
+function applyThemeColor(colorValue) {
+  const root = document.documentElement;
+  if (!colorValue) {
+    root.style.removeProperty('--bg');
+    root.style.removeProperty('--paper');
+    root.style.removeProperty('--ink');
+    root.style.removeProperty('--muted');
+    root.style.removeProperty('--accent');
+    root.style.removeProperty('--accent-soft');
+    root.style.removeProperty('--overlay-start');
+    root.style.removeProperty('--overlay-end');
+    root.style.removeProperty('--glow-one');
+    root.style.removeProperty('--glow-two');
+    root.style.removeProperty('--glow-three');
+    root.style.removeProperty('--orb-a');
+    root.style.removeProperty('--orb-b');
+    root.style.removeProperty('--glass-soft');
+    if (customThemeColor) customThemeColor.value = '#7f6edc';
+    if (customThemePreview) customThemePreview.style.background = '#7f6edc';
+    if (customThemeLabel) customThemeLabel.textContent = 'Tema atual: padrao';
+    return;
+  }
+
+  const accent = colorValue;
+  const accentSoft = mixHexColors(accent, '#ffffff', 0.2);
+  const paper = mixHexColors(accent, '#d7c7ff', 0.45);
+  const bg = mixHexColors(accent, '#b09ae8', 0.35);
+  const muted = mixHexColors(accent, '#3f2b76', 0.45);
+  const ink = getContrastInk(mixHexColors(accent, '#ffffff', 0.55));
+  const overlayStart = hexToRgba(mixHexColors(accent, '#1c113b', 0.3), 0.46);
+  const overlayEnd = hexToRgba(mixHexColors(accent, '#ffffff', 0.15), 0.5);
+  const glowOne = hexToRgba(mixHexColors(accent, '#ffffff', 0.78), 0.58);
+  const glowTwo = hexToRgba(mixHexColors(accent, '#eef0ff', 0.65), 0.52);
+  const glowThree = hexToRgba(mixHexColors(accent, '#fff6ff', 0.7), 0.42);
+  const orbA = mixHexColors(accent, '#ffd8ff', 0.5);
+  const orbB = mixHexColors(accent, '#c3c7ff', 0.38);
+  const glassSoft = hexToRgba(mixHexColors(accent, '#ffffff', 0.35), 0.12);
+
+  root.style.setProperty('--bg', bg);
+  root.style.setProperty('--paper', paper);
+  root.style.setProperty('--ink', ink);
+  root.style.setProperty('--muted', muted);
+  root.style.setProperty('--accent', accent);
+  root.style.setProperty('--accent-soft', accentSoft);
+  root.style.setProperty('--overlay-start', overlayStart);
+  root.style.setProperty('--overlay-end', overlayEnd);
+  root.style.setProperty('--glow-one', glowOne);
+  root.style.setProperty('--glow-two', glowTwo);
+  root.style.setProperty('--glow-three', glowThree);
+  root.style.setProperty('--orb-a', orbA);
+  root.style.setProperty('--orb-b', orbB);
+  root.style.setProperty('--glass-soft', glassSoft);
+
+  if (customThemeColor) customThemeColor.value = accent;
+  if (customThemePreview) customThemePreview.style.background = accent;
+  if (customThemeLabel) customThemeLabel.textContent = `Tema atual: ${accent.toUpperCase()}`;
+}
+
 function applyWallpaper(pathValue) {
   if (pathValue) {
     document.body.style.setProperty('--user-wallpaper', `url("${pathValue}")`);
@@ -1514,25 +1616,35 @@ function applyEquipped() {
   if (fontItem) document.body.classList.add(fontItem.effect_class);
   // Efeito de tag agora e aplicado por tag individual, nao globalmente no body.
   applyWallpaper(state.equipped.active_wallpaper || null);
+  applyThemeColor(state.equipped.active_theme_color || null);
 }
 
 const CATEGORY_LABELS = { font: 'Fonte', tag_effect: 'Efeito de Tag' };
 
 function updateShopPanels() {
+  const themeMode = state.shopFilter === 'theme';
   const wallpaperMode = state.shopFilter === 'wallpaper';
+  if (shopThemeCard) {
+    shopThemeCard.classList.toggle('hidden', !themeMode);
+  }
   if (shopWallpaperCard) {
     shopWallpaperCard.classList.toggle('hidden', !wallpaperMode);
   }
   if (shopGrid) {
-    shopGrid.classList.toggle('hidden', wallpaperMode);
+    shopGrid.classList.toggle('hidden', wallpaperMode || themeMode);
   }
   if (shopMessage) {
-    shopMessage.classList.toggle('hidden', wallpaperMode);
+    shopMessage.classList.toggle('hidden', wallpaperMode || themeMode);
   }
 }
 
 function renderShop() {
   updateShopPanels();
+
+  if (state.shopFilter === 'theme') {
+    applyThemeColor(state.equipped.active_theme_color || null);
+    return;
+  }
 
   if (state.shopFilter === 'wallpaper') {
     renderCustomWallpapers();
@@ -1635,9 +1747,12 @@ async function loadShopData() {
     state.soninhos = balanceData.balance ?? 0;
     state.shopItems = shopData.items || [];
     state.customWallpapers = wallpapersData.wallpapers || [];
-    state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null };
+    state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null, active_theme_color: null };
     if (customWallpaperUrl && state.equipped.active_wallpaper) {
       customWallpaperUrl.value = '';
+    }
+    if (customThemeColor && state.equipped.active_theme_color) {
+      customThemeColor.value = state.equipped.active_theme_color;
     }
     updateSoninhosDisplay();
     applyEquipped();
@@ -1904,6 +2019,35 @@ async function removeCustomWallpaper() {
     showMessage(customWallpaperStatus, 'Wallpaper personalizado removido.');
   } catch (err) {
     showMessage(customWallpaperStatus, err.message, true);
+  }
+}
+
+async function applyCustomThemeColor(colorValue) {
+  try {
+    const result = await api('/api/shop/theme/custom', {
+      method: 'POST',
+      body: JSON.stringify({ color: colorValue }),
+    });
+    state.soninhos = result.newBalance;
+    state.equipped.active_theme_color = result.color;
+    updateSoninhosDisplay();
+    applyThemeColor(result.color);
+    showMessage(customThemeStatus, `Cor aplicada com sucesso. Saldo: ✨ ${result.newBalance}.`);
+    await loadShopData();
+  } catch (err) {
+    showMessage(customThemeStatus, err.message, true);
+  }
+}
+
+async function removeCustomThemeColor() {
+  try {
+    await api('/api/shop/theme/remove', { method: 'POST' });
+    state.equipped.active_theme_color = null;
+    applyThemeColor(null);
+    showMessage(customThemeStatus, 'Tema padrao restaurado.');
+    await loadShopData();
+  } catch (err) {
+    showMessage(customThemeStatus, err.message, true);
   }
 }
 
@@ -2280,6 +2424,27 @@ function attachEvents() {
   if (removeCustomWallpaperBtn) {
     removeCustomWallpaperBtn.addEventListener('click', async () => {
       await removeCustomWallpaper();
+    });
+  }
+
+  if (customThemeForm) {
+    customThemeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await applyCustomThemeColor(customThemeColor?.value || '');
+    });
+  }
+
+  if (customThemeColor) {
+    customThemeColor.addEventListener('input', () => {
+      const previewColor = customThemeColor.value;
+      if (customThemePreview) customThemePreview.style.background = previewColor;
+      if (customThemeLabel) customThemeLabel.textContent = `Previa: ${previewColor.toUpperCase()}`;
+    });
+  }
+
+  if (removeCustomThemeBtn) {
+    removeCustomThemeBtn.addEventListener('click', async () => {
+      await removeCustomThemeColor();
     });
   }
 

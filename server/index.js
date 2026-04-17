@@ -13,6 +13,7 @@ const wallpaperStoreDir = path.join(publicDir, "wallpapers");
 const passItemsDir = path.join(publicDir, "passe-itens");
 const passProfileItemsDir = path.join(passItemsDir, "perfil");
 const CUSTOM_WALLPAPER_PRICE = 200;
+const CUSTOM_THEME_COLOR_PRICE = 120;
 const WEEKLY_PASS_PRICE = 100;
 const DAILY_PASS_REWARD = 20;
 const WEEKEND_PASS_REWARD = 100;
@@ -329,6 +330,10 @@ async function userOwnsShopItem(db, userId, itemId) {
 function normalizeOptionalClass(value) {
   const normalized = value == null ? "" : String(value).trim();
   return normalized || null;
+}
+
+function isValidHexColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(value || "").trim());
 }
 
 async function areFriends(db, userA, userB) {
@@ -1107,6 +1112,7 @@ app.get("/api/shop/items", authMiddleware, async (req, res) => {
       active_font: equipped?.active_font || null,
       active_tag_effect: equipped?.active_tag_effect || null,
       active_wallpaper: equipped?.active_wallpaper || null,
+      active_theme_color: equipped?.active_theme_color || null,
     },
   });
 });
@@ -1278,6 +1284,48 @@ app.post("/api/shop/wallpaper/remove", authMiddleware, async (req, res) => {
     [req.user.id]
   );
   await db.run("UPDATE user_equipped SET active_wallpaper = NULL WHERE user_id = ?", [req.user.id]);
+  return res.json({ success: true });
+});
+
+app.post("/api/shop/theme/custom", authMiddleware, async (req, res) => {
+  const color = String(req.body?.color || "").trim();
+  if (!isValidHexColor(color)) {
+    return res.status(400).json({ message: "Cor invalida. Escolha uma cor valida na roda." });
+  }
+
+  const db = await getDb();
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = user?.soninhos_balance ?? 0;
+  if (balance < CUSTOM_THEME_COLOR_PRICE) {
+    return res.status(400).json({
+      message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${CUSTOM_THEME_COLOR_PRICE}`,
+    });
+  }
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_theme_color) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+
+  const equipped = await db.get("SELECT active_theme_color FROM user_equipped WHERE user_id = ?", [req.user.id]);
+  if (String(equipped?.active_theme_color || "").toLowerCase() === color.toLowerCase()) {
+    return res.status(400).json({ message: "Essa cor ja esta em uso" });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [CUSTOM_THEME_COLOR_PRICE, req.user.id]);
+  await db.run("UPDATE user_equipped SET active_theme_color = ? WHERE user_id = ?", [color, req.user.id]);
+
+  const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ success: true, color, newBalance: userAfter.soninhos_balance });
+});
+
+app.post("/api/shop/theme/remove", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_theme_color) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_theme_color = NULL WHERE user_id = ?", [req.user.id]);
   return res.json({ success: true });
 });
 
