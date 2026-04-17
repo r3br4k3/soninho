@@ -36,6 +36,7 @@ export async function getDb() {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      coins_balance INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -124,6 +125,7 @@ export async function getDb() {
       active_font TEXT DEFAULT NULL,
       active_tag_effect TEXT DEFAULT NULL,
       active_wallpaper TEXT DEFAULT NULL,
+      active_profile_image TEXT DEFAULT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -136,6 +138,36 @@ export async function getDb() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS pass_subscriptions (
+      user_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      paid_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, week_start),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS pass_claims (
+      user_id INTEGER NOT NULL,
+      claim_date TEXT NOT NULL,
+      week_start TEXT NOT NULL,
+      reward_coins INTEGER NOT NULL,
+      claimed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, claim_date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_pass_profile_rewards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      image_path TEXT NOT NULL,
+      claimed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, item_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Adiciona coluna soninhos_balance se ainda nao existir (migracao segura)
@@ -145,9 +177,23 @@ export async function getDb() {
     // coluna ja existe, sem problema
   }
 
+  // Adiciona coluna coins_balance se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE users ADD COLUMN coins_balance INTEGER DEFAULT 0');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
   // Adiciona coluna active_wallpaper se ainda nao existir (migracao segura)
   try {
     await db.exec('ALTER TABLE user_equipped ADD COLUMN active_wallpaper TEXT DEFAULT NULL');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  // Adiciona coluna active_profile_image se ainda nao existir (migracao segura)
+  try {
+    await db.exec('ALTER TABLE user_equipped ADD COLUMN active_profile_image TEXT DEFAULT NULL');
   } catch {
     // coluna ja existe, sem problema
   }

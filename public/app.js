@@ -27,10 +27,35 @@ const state = {
   locationWatchId: null,
   friendLocationPollId: null,
   soninhos: 0,
+  coins: 0,
   shopItems: [],
   customWallpapers: [],
   equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null },
   shopFilter: 'all',
+  passView: 'rewards',
+  pass: {
+    active: false,
+    weekStart: '',
+    paidAt: null,
+    today: '',
+    todayReward: 20,
+    todayClaimed: false,
+    todayClaimReward: 0,
+    weeklyClaimCount: 0,
+    soninhosBalance: 0,
+    coinsBalance: 0,
+    weeklyPrice: 100,
+    weekdayReward: 20,
+    weekendReward: 100,
+    itemsFolder: '/passe-itens/',
+    profileItemsFolder: '/passe-itens/perfil/',
+    items: [],
+    activeProfileImage: null,
+    weeklyProfileRewardClaimed: false,
+    canClaimWeeklyProfileReward: false,
+    currentWeeklyProfileReward: null,
+    ownedProfileRewards: [],
+  },
   adminUnlocked: false,
   adminUsers: [],
   adminShopItems: [],
@@ -44,7 +69,9 @@ const tabRegister = document.getElementById('tabRegister');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const welcomeName = document.getElementById('welcomeName');
+const welcomeProfileImage = document.getElementById('welcomeProfileImage');
 const logoutBtn = document.getElementById('logoutBtn');
+const coinsBalance = document.getElementById('coinsBalance');
 const dreamDate = document.getElementById('dreamDate');
 const dreamForm = document.getElementById('dreamForm');
 const dreamMessage = document.getElementById('dreamMessage');
@@ -82,6 +109,7 @@ const soninhosBalance = document.getElementById('soninhosBalance');
 const shopGrid = document.getElementById('shopGrid');
 const shopMessage = document.getElementById('shopMessage');
 const shopBalanceDisplay = document.getElementById('shopBalanceDisplay');
+const passCoinsBalance = document.getElementById('passCoinsBalance');
 const shopWallpaperCard = document.getElementById('shopWallpaperCard');
 const customWallpaperForm = document.getElementById('customWallpaperForm');
 const customWallpaperUrl = document.getElementById('customWallpaperUrl');
@@ -98,6 +126,34 @@ const adminTogglePurchaseBtn = document.getElementById('adminTogglePurchaseBtn')
 const adminPurchaseState = document.getElementById('adminPurchaseState');
 const adminStatus = document.getElementById('adminStatus');
 const adminAccountsList = document.getElementById('adminAccountsList');
+const passWeekTitle = document.getElementById('passWeekTitle');
+const passWeekLabel = document.getElementById('passWeekLabel');
+const passStatusBadge = document.getElementById('passStatusBadge');
+const passRewardToday = document.getElementById('passRewardToday');
+const passClaimCount = document.getElementById('passClaimCount');
+const passClaimHint = document.getElementById('passClaimHint');
+const passClaimBtn = document.getElementById('passClaimBtn');
+const passClaimMessage = document.getElementById('passClaimMessage');
+const passPreviewWeekday = document.getElementById('passPreviewWeekday');
+const passPreviewWeekend = document.getElementById('passPreviewWeekend');
+const passPreviewProfileImage = document.getElementById('passPreviewProfileImage');
+const passPreviewProfileName = document.getElementById('passPreviewProfileName');
+const passPreviewProfileHint = document.getElementById('passPreviewProfileHint');
+const passPaymentSummary = document.getElementById('passPaymentSummary');
+const passPayBtn = document.getElementById('passPayBtn');
+const passPaymentMessage = document.getElementById('passPaymentMessage');
+const passRewardsView = document.getElementById('passRewardsView');
+const passPaymentView = document.getElementById('passPaymentView');
+const passProfileView = document.getElementById('passProfileView');
+const passWeeklyProfilePreview = document.getElementById('passWeeklyProfilePreview');
+const passWeeklyProfileName = document.getElementById('passWeeklyProfileName');
+const passWeeklyProfileHint = document.getElementById('passWeeklyProfileHint');
+const passClaimProfileBtn = document.getElementById('passClaimProfileBtn');
+const passClaimProfileMessage = document.getElementById('passClaimProfileMessage');
+const passProfileFolder = document.getElementById('passProfileFolder');
+const passProfileRewardsList = document.getElementById('passProfileRewardsList');
+const passUnequipProfileBtn = document.getElementById('passUnequipProfileBtn');
+const passProfileEquipMessage = document.getElementById('passProfileEquipMessage');
 
 const ADMIN_TRIGGER_KEY = 'william';
 
@@ -598,6 +654,7 @@ function setLoggedIn(user, token) {
   localStorage.setItem('soninhos_token', token);
 
   welcomeName.textContent = user.name.toUpperCase();
+  applyProfileBadge(null);
   authView.classList.add('hidden');
   appView.classList.remove('hidden');
 
@@ -614,8 +671,36 @@ function logout() {
 
   state.user = null;
   state.token = '';
+  state.soninhos = 0;
+  state.coins = 0;
   state.equipped = { active_font: null, active_tag_effect: null, active_wallpaper: null };
+  state.pass = {
+    active: false,
+    weekStart: '',
+    paidAt: null,
+    today: '',
+    todayReward: 20,
+    todayClaimed: false,
+    todayClaimReward: 0,
+    weeklyClaimCount: 0,
+    soninhosBalance: 0,
+    coinsBalance: 0,
+    weeklyPrice: 100,
+    weekdayReward: 20,
+    weekendReward: 100,
+    itemsFolder: '/passe-itens/',
+    profileItemsFolder: '/passe-itens/perfil/',
+    items: [],
+    activeProfileImage: null,
+    weeklyProfileRewardClaimed: false,
+    canClaimWeeklyProfileReward: false,
+    currentWeeklyProfileReward: null,
+    ownedProfileRewards: [],
+  };
   applyWallpaper(null);
+  applyProfileBadge(null);
+  updateSoninhosDisplay();
+  activatePassView('rewards');
   localStorage.removeItem('soninhos_user');
   localStorage.removeItem('soninhos_token');
   authView.classList.remove('hidden');
@@ -1143,12 +1228,190 @@ function activateTab(tabName) {
   document.querySelector(`.nav-btn[data-tab="${tabName}"]`).classList.add('active');
 }
 
+function formatShortDate(dateValue) {
+  const [year, month, day] = String(dateValue || '').split('-');
+  if (!year || !month || !day) return '--/--';
+  return `${day}/${month}`;
+}
+
+function formatPassWeekLabel(weekStart) {
+  if (!weekStart) return 'Semana atual indisponivel';
+  const [year, month, day] = weekStart.split('-').map(Number);
+  const start = new Date(year, month - 1, day);
+  const end = new Date(year, month - 1, day + 6);
+  return `${formatShortDate(weekStart)} ate ${formatShortDate(localDateISO(end))}`;
+}
+
+function activatePassView(viewName) {
+  state.passView = viewName;
+  document.querySelectorAll('.pass-view-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.passView === viewName);
+  });
+  if (passRewardsView) passRewardsView.classList.toggle('active', viewName === 'rewards');
+  if (passPaymentView) passPaymentView.classList.toggle('active', viewName === 'payment');
+  if (passProfileView) passProfileView.classList.toggle('active', viewName === 'profile');
+}
+
+function applyProfileBadge(imagePath) {
+  if (!welcomeProfileImage) return;
+
+  if (imagePath) {
+    welcomeProfileImage.src = imagePath;
+    welcomeProfileImage.classList.remove('hidden');
+    return;
+  }
+
+  welcomeProfileImage.src = '';
+  welcomeProfileImage.classList.add('hidden');
+}
+
+function renderPassProfileRewards() {
+  if (!passProfileRewardsList) return;
+  passProfileRewardsList.innerHTML = '';
+
+  const rewards = Array.isArray(state.pass.ownedProfileRewards) ? state.pass.ownedProfileRewards : [];
+  if (!rewards.length) {
+    passProfileRewardsList.innerHTML = '<p class="pass-muted">Voce ainda nao desbloqueou fotos de perfil do passe.</p>';
+    return;
+  }
+
+  rewards.forEach((reward) => {
+    const card = document.createElement('article');
+    card.className = 'pass-profile-card';
+
+    const preview = document.createElement('img');
+    preview.className = 'pass-profile-thumb';
+    preview.src = reward.image_path;
+    preview.alt = `Foto de perfil ${reward.item_name}`;
+
+    const info = document.createElement('div');
+    info.className = 'pass-profile-info';
+    info.innerHTML = `
+      <strong>${escapeHtml(reward.item_name)}</strong>
+      <small>Liberado em: ${formatDateTime(reward.claimed_at)}</small>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'shop-item-actions';
+
+    const isActive = reward.image_path === state.pass.activeProfileImage;
+    const equipBtn = document.createElement('button');
+    equipBtn.type = 'button';
+    equipBtn.className = isActive ? 'btn-ghost' : 'btn-primary';
+    equipBtn.textContent = isActive ? 'Ativa' : 'Ativar';
+    equipBtn.disabled = isActive;
+    equipBtn.addEventListener('click', async () => {
+      await equipPassProfileReward(reward.id);
+    });
+    actions.appendChild(equipBtn);
+
+    card.appendChild(preview);
+    card.appendChild(info);
+    card.appendChild(actions);
+    passProfileRewardsList.appendChild(card);
+  });
+}
+
+function renderPass() {
+  if (!passWeekLabel || !passStatusBadge || !passRewardToday || !passClaimCount || !passClaimHint || !passClaimBtn) return;
+
+  const isActive = Boolean(state.pass.active);
+  const paidLabel = state.pass.paidAt ? `Pago em ${formatDateTime(state.pass.paidAt)}` : 'Ainda nao pago nesta semana';
+
+  if (passWeekTitle) {
+    passWeekTitle.textContent = isActive ? 'Passe semanal ativo' : 'Passe semanal inativo';
+  }
+  passWeekLabel.textContent = `${formatPassWeekLabel(state.pass.weekStart)} • ${paidLabel}`;
+  passStatusBadge.textContent = isActive ? 'Ativo' : 'Inativo';
+  passStatusBadge.classList.toggle('status-on', isActive);
+  passStatusBadge.classList.toggle('status-off', !isActive);
+  passRewardToday.textContent = `🪙 ${state.pass.todayReward || 0}`;
+  passClaimCount.textContent = `${state.pass.weeklyClaimCount || 0}/7`;
+  if (passPreviewWeekday) {
+    passPreviewWeekday.textContent = `🪙 ${state.pass.weekdayReward || 20} coins por dia`;
+  }
+  if (passPreviewWeekend) {
+    passPreviewWeekend.textContent = `🪙 ${state.pass.weekendReward || 100} coins por dia`;
+  }
+  passClaimHint.textContent = isActive
+    ? (state.pass.todayClaimed
+      ? `Hoje ja foi resgatado: +🪙 ${state.pass.todayClaimReward || state.pass.todayReward || 0}.`
+      : 'Seu passe esta ativo. Resgate os coins de hoje agora.')
+    : 'Pague o passe semanal na aba de pagamento para liberar os resgates diarios.';
+  passClaimBtn.disabled = !isActive || state.pass.todayClaimed;
+  passClaimBtn.textContent = state.pass.todayClaimed ? 'Coins de hoje ja resgatados' : 'Resgatar coins de hoje';
+
+  if (passPaymentSummary) {
+    passPaymentSummary.textContent = isActive
+      ? `Passe ja pago para a semana ${formatPassWeekLabel(state.pass.weekStart)}.`
+      : `Pague ${state.pass.weeklyPrice || 100} soninhos para ativar o passe desta semana.`;
+  }
+  if (passPayBtn) {
+    passPayBtn.disabled = isActive;
+    passPayBtn.textContent = isActive ? 'Passe ja pago nesta semana' : `Pagar ${state.pass.weeklyPrice || 100} soninhos`;
+  }
+
+  const weeklyProfileReward = state.pass.currentWeeklyProfileReward;
+  if (passPreviewProfileName) {
+    passPreviewProfileName.textContent = weeklyProfileReward?.itemName || 'Foto de perfil semanal';
+  }
+  if (passPreviewProfileHint) {
+    passPreviewProfileHint.textContent = state.pass.weeklyProfileRewardClaimed
+      ? 'Voce ja desbloqueou esta foto nesta semana. Ela ficou permanente no inventario.'
+      : 'Disponivel so nesta semana (segunda a domingo).';
+  }
+  if (passPreviewProfileImage) {
+    if (weeklyProfileReward?.imagePath) {
+      passPreviewProfileImage.src = weeklyProfileReward.imagePath;
+      passPreviewProfileImage.classList.remove('hidden');
+    } else {
+      passPreviewProfileImage.src = '';
+      passPreviewProfileImage.classList.add('hidden');
+    }
+  }
+  if (passWeeklyProfileName) {
+    passWeeklyProfileName.textContent = weeklyProfileReward?.itemName || 'Nenhuma recompensa configurada';
+  }
+  if (passWeeklyProfilePreview) {
+    if (weeklyProfileReward?.imagePath) {
+      passWeeklyProfilePreview.src = weeklyProfileReward.imagePath;
+      passWeeklyProfilePreview.classList.remove('hidden');
+    } else {
+      passWeeklyProfilePreview.src = '';
+      passWeeklyProfilePreview.classList.add('hidden');
+    }
+  }
+  if (passWeeklyProfileHint) {
+    const profileStatusText = state.pass.weeklyProfileRewardClaimed
+      ? 'Foto da semana ja resgatada. Ela e permanente no seu inventario.'
+      : `Progresso da semana: ${state.pass.weeklyClaimCount || 0}/7 resgates diarios.`;
+    passWeeklyProfileHint.textContent = `${profileStatusText} Se nao resgatar ate domingo, a recompensa da semana expira.`;
+  }
+  if (passClaimProfileBtn) {
+    passClaimProfileBtn.disabled = !state.pass.canClaimWeeklyProfileReward;
+    passClaimProfileBtn.textContent = state.pass.weeklyProfileRewardClaimed
+      ? 'Foto semanal ja resgatada'
+      : 'Resgatar foto de perfil da semana';
+  }
+  if (passProfileFolder) {
+    passProfileFolder.textContent = `Pasta de imagens de perfil: ${state.pass.profileItemsFolder || '/passe-itens/perfil/'}`;
+  }
+  if (passUnequipProfileBtn) {
+    passUnequipProfileBtn.disabled = !state.pass.activeProfileImage;
+  }
+
+  applyProfileBadge(state.pass.activeProfileImage || null);
+  renderPassProfileRewards();
+}
+
 // ─── LOJA DOS SONHOS ─────────────────────────────────────────────────────────
 
 function updateSoninhosDisplay() {
   const txt = `✨ ${state.soninhos} soninhos`;
   if (soninhosBalance) soninhosBalance.textContent = txt;
   if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${state.soninhos}`;
+  if (coinsBalance) coinsBalance.textContent = `🪙 ${state.coins} coins`;
+  if (passCoinsBalance) passCoinsBalance.textContent = `🪙 ${state.coins}`;
 }
 
 function applyWallpaper(pathValue) {
@@ -1299,6 +1562,7 @@ async function loadShopData() {
       api('/api/shop/wallpapers'),
     ]);
     state.soninhos = balanceData.balance ?? 0;
+    state.coins = balanceData.coinsBalance ?? state.coins;
     state.shopItems = shopData.items || [];
     state.customWallpapers = wallpapersData.wallpapers || [];
     state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null };
@@ -1313,6 +1577,107 @@ async function loadShopData() {
     renderTagChecklist();
   } catch {
     // silencioso
+  }
+}
+
+async function loadPassData() {
+  try {
+    const data = await api('/api/pass/status');
+    state.pass = {
+      ...state.pass,
+      ...(data.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+  } catch (err) {
+    if (passClaimMessage) showMessage(passClaimMessage, err.message, true);
+  }
+}
+
+async function subscribeToPass() {
+  try {
+    const result = await api('/api/pass/subscribe', { method: 'POST' });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passPaymentMessage, 'Passe semanal pago com sucesso.');
+  } catch (err) {
+    showMessage(passPaymentMessage, err.message, true);
+  }
+}
+
+async function claimPassReward() {
+  try {
+    const result = await api('/api/pass/claim', { method: 'POST' });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passClaimMessage, `Resgate concluido: +🪙 ${result.rewardCoins} coins.`);
+  } catch (err) {
+    showMessage(passClaimMessage, err.message, true);
+  }
+}
+
+async function claimPassProfileReward() {
+  try {
+    const result = await api('/api/pass/profile/claim', { method: 'POST' });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passClaimProfileMessage, `Foto de perfil desbloqueada: ${result.reward?.itemName || 'recompensa semanal'}!`);
+  } catch (err) {
+    showMessage(passClaimProfileMessage, err.message, true);
+  }
+}
+
+async function equipPassProfileReward(rewardId) {
+  try {
+    const result = await api(`/api/pass/profile/equip/${encodeURIComponent(rewardId)}`, { method: 'POST' });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passProfileEquipMessage, 'Foto de perfil ativada com sucesso.');
+  } catch (err) {
+    showMessage(passProfileEquipMessage, err.message, true);
+  }
+}
+
+async function unequipPassProfileReward() {
+  try {
+    const result = await api('/api/pass/profile/unequip', { method: 'POST' });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
+    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passProfileEquipMessage, 'Foto de perfil removida.');
+  } catch (err) {
+    showMessage(passProfileEquipMessage, err.message, true);
   }
 }
 
@@ -1470,6 +1835,7 @@ async function bootstrapAppData() {
     await renderCalendar();
     await loadStats();
     await loadShopData();
+    await loadPassData();
   } catch (err) {
     showMessage(dreamMessage, err.message, true);
   }
@@ -1707,6 +2073,7 @@ function attachEvents() {
       if (tab === 'stats') await loadStats();
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'shop') await loadShopData();
+      if (tab === 'pass') await loadPassData();
       if (tab === 'friends') {
         await loadFriendsData();
         if (friendLocationSelect.value) {
@@ -1748,6 +2115,36 @@ function attachEvents() {
       renderShop();
     });
   });
+
+  document.querySelectorAll('.pass-view-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activatePassView(btn.dataset.passView);
+    });
+  });
+
+  if (passPayBtn) {
+    passPayBtn.addEventListener('click', async () => {
+      await subscribeToPass();
+    });
+  }
+
+  if (passClaimBtn) {
+    passClaimBtn.addEventListener('click', async () => {
+      await claimPassReward();
+    });
+  }
+
+  if (passClaimProfileBtn) {
+    passClaimProfileBtn.addEventListener('click', async () => {
+      await claimPassProfileReward();
+    });
+  }
+
+  if (passUnequipProfileBtn) {
+    passUnequipProfileBtn.addEventListener('click', async () => {
+      await unequipPassProfileReward();
+    });
+  }
 
   if (customWallpaperForm) {
     customWallpaperForm.addEventListener('submit', async (e) => {
@@ -1851,6 +2248,7 @@ async function registerServiceWorker() {
 async function init() {
   await initDeviceId();
   attachEvents();
+  activatePassView(state.passView);
   await registerServiceWorker();
 
   const reminder = getReminderStorage();

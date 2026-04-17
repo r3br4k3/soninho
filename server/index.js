@@ -10,7 +10,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "..", "public");
 const wallpaperStoreDir = path.join(publicDir, "wallpapers");
+const passItemsDir = path.join(publicDir, "passe-itens");
+const passProfileItemsDir = path.join(passItemsDir, "perfil");
 const CUSTOM_WALLPAPER_PRICE = 200;
+const WEEKLY_PASS_PRICE = 100;
+const DAILY_PASS_REWARD = 20;
+const WEEKEND_PASS_REWARD = 100;
 const ADMIN_KEY = String(process.env.ADMIN_KEY || "william").toLowerCase();
 const TAG_CUSTOM_ITEM_ID = "tag_custom_personalizada";
 const ALLOWED_TAG_FONT_CLASSES = new Set(["font-dancing", "font-orbitron", "font-playfair", "font-courier"]);
@@ -55,6 +60,170 @@ function fileExtensionFromContentType(contentType) {
 
 async function ensureWallpaperStoreDir() {
   await fs.mkdir(wallpaperStoreDir, { recursive: true });
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function localDateISO(dateObj = new Date()) {
+  return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth() + 1)}-${pad2(dateObj.getDate())}`;
+}
+
+function startOfWeekLocal(dateObj = new Date()) {
+  const copy = new Date(dateObj);
+  copy.setHours(12, 0, 0, 0);
+  const day = copy.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diffToMonday);
+  return copy;
+}
+
+function weekStartISO(dateObj = new Date()) {
+  return localDateISO(startOfWeekLocal(dateObj));
+}
+
+function isWeekendDate(dateObj = new Date()) {
+  const day = dateObj.getDay();
+  return day === 0 || day === 6;
+}
+
+function getDailyPassReward(dateObj = new Date()) {
+  return isWeekendDate(dateObj) ? WEEKEND_PASS_REWARD : DAILY_PASS_REWARD;
+}
+
+async function listPassItems() {
+  try {
+    const entries = await fs.readdir(passItemsDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+      .map((entry) => ({
+        name: entry.name,
+        path: `/passe-itens/${entry.name}`,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function isSupportedImageFile(fileName) {
+  return /\.(png|jpe?g|webp|gif)$/i.test(String(fileName || ""));
+}
+
+async function listPassProfileRewardFiles() {
+  const sources = [
+    { dirPath: passProfileItemsDir, urlPrefix: '/passe-itens/perfil/' },
+    { dirPath: passItemsDir, urlPrefix: '/passe-itens/' },
+  ];
+
+  const allFiles = [];
+  for (const source of sources) {
+    try {
+      const entries = await fs.readdir(source.dirPath, { withFileTypes: true });
+      const files = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && !entry.name.startsWith('.') && isSupportedImageFile(entry.name))
+          .map(async (entry) => {
+            const absolutePath = path.join(source.dirPath, entry.name);
+            const stats = await fs.stat(absolutePath);
+            return {
+              itemKey: `${source.urlPrefix}${entry.name}`,
+              itemName: entry.name.replace(/\.[^.]+$/, ""),
+              imagePath: `${source.urlPrefix}${entry.name}`,
+              mtimeMs: stats.mtimeMs,
+            };
+          })
+      );
+      allFiles.push(...files);
+    } catch {
+      // pasta pode nao existir ou estar vazia
+    }
+  }
+
+  return allFiles.sort((a, b) => b.mtimeMs - a.mtimeMs || a.itemKey.localeCompare(b.itemKey));
+}
+
+async function getCurrentWeeklyProfileReward() {
+  const profileFiles = await listPassProfileRewardFiles();
+  return profileFiles[0] || null;
+}
+
+async function getPassStatus(db, userId) {
+  const now = new Date();
+  const today = localDateISO(now);
+  const currentWeekStart = weekStartISO(now);
+  const subscription = await db.get(
+    "SELECT week_start, paid_at FROM pass_subscriptions WHERE user_id = ? AND week_start = ?",
+    [userId, currentWeekStart]
+  );
+  const todayClaim = await db.get(
+    "SELECT claim_date, reward_coins, claimed_at FROM pass_claims WHERE user_id = ? AND claim_date = ?",
+    [userId, today]
+  );
+  const weeklyClaims = await db.all(
+    `SELECT claim_date, reward_coins, claimed_at
+     FROM pass_claims
+     WHERE user_id = ? AND week_start = ?
+     ORDER BY claim_date ASC`,
+    [userId, currentWeekStart]
+  );
+  const user = await db.get(
+    "SELECT soninhos_balance, coins_balance FROM users WHERE id = ?",
+    [userId]
+  );
+  const equipped = await db.get(
+    "SELECT active_profile_image FROM user_equipped WHERE user_id = ?",
+    [userId]
+  );
+  const passItems = await listPassItems();
+  const currentWeeklyProfileReward = await getCurrentWeeklyProfileReward();
+  const ownedProfileRewards = await db.all(
+    `SELECT id, week_start, item_key, item_name, image_path, claimed_at
+     FROM user_pass_profile_rewards
+     WHERE user_id = ?
+     ORDER BY claimed_at DESC, id DESC`,
+    [userId]
+  );
+  const alreadyOwnsCurrentProfileReward = currentWeeklyProfileReward
+    ? ownedProfileRewards.some((reward) => reward.item_key === currentWeeklyProfileReward.itemKey)
+    : false;
+  const canClaimWeeklyProfileReward = Boolean(
+    subscription
+      && weeklyClaims.length >= 7
+      && currentWeeklyProfileReward
+      && !alreadyOwnsCurrentProfileReward
+  );
+
+  return {
+    active: Boolean(subscription),
+    weekStart: currentWeekStart,
+    paidAt: subscription?.paid_at || null,
+    today,
+    todayReward: getDailyPassReward(now),
+    todayClaimed: Boolean(todayClaim),
+    todayClaimReward: todayClaim?.reward_coins || 0,
+    weeklyClaimCount: weeklyClaims.length,
+    weeklyClaims,
+    soninhosBalance: user?.soninhos_balance ?? 0,
+    coinsBalance: user?.coins_balance ?? 0,
+    weeklyPrice: WEEKLY_PASS_PRICE,
+    weekdayReward: DAILY_PASS_REWARD,
+    weekendReward: WEEKEND_PASS_REWARD,
+    itemsFolder: '/passe-itens/',
+    profileItemsFolder: '/passe-itens/perfil/ (ou /passe-itens/)',
+    items: passItems,
+    activeProfileImage: equipped?.active_profile_image || null,
+    weeklyProfileRewardClaimed: Boolean(currentWeeklyProfileReward && alreadyOwnsCurrentProfileReward),
+    canClaimWeeklyProfileReward,
+    currentWeeklyProfileReward: currentWeeklyProfileReward
+      ? {
+          itemKey: currentWeeklyProfileReward.itemKey,
+          itemName: currentWeeklyProfileReward.itemName,
+          imagePath: currentWeeklyProfileReward.imagePath,
+        }
+      : null,
+    ownedProfileRewards,
+  };
 }
 
 async function downloadWallpaperToStore(imageUrl, userId) {
@@ -233,7 +402,7 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
   const db = await getDb();
-  const user = await db.get("SELECT id, name, email, created_at FROM users WHERE id = ?", [req.user.id]);
+  const user = await db.get("SELECT id, name, email, created_at, soninhos_balance, coins_balance FROM users WHERE id = ?", [req.user.id]);
   return res.json({ user });
 });
 
@@ -741,8 +910,163 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
 
 app.get("/api/shop/balance", authMiddleware, async (req, res) => {
   const db = await getDb();
+  const user = await db.get("SELECT soninhos_balance, coins_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ balance: user?.soninhos_balance ?? 0, coinsBalance: user?.coins_balance ?? 0 });
+});
+
+app.get("/api/pass/status", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ pass });
+});
+
+app.post("/api/pass/subscribe", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const currentWeekStart = weekStartISO();
+  const existing = await db.get(
+    "SELECT 1 FROM pass_subscriptions WHERE user_id = ? AND week_start = ?",
+    [req.user.id, currentWeekStart]
+  );
+
+  if (existing) {
+    return res.status(400).json({ message: "Voce ja pagou o passe desta semana" });
+  }
+
   const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
-  return res.json({ balance: user?.soninhos_balance ?? 0 });
+  const balance = user?.soninhos_balance ?? 0;
+  if (balance < WEEKLY_PASS_PRICE) {
+    return res.status(400).json({
+      message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${WEEKLY_PASS_PRICE}`,
+    });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [WEEKLY_PASS_PRICE, req.user.id]);
+  await db.run(
+    "INSERT INTO pass_subscriptions (user_id, week_start) VALUES (?, ?)",
+    [req.user.id, currentWeekStart]
+  );
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, pass });
+});
+
+app.post("/api/pass/claim", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const now = new Date();
+  const today = localDateISO(now);
+  const currentWeekStart = weekStartISO(now);
+
+  const subscription = await db.get(
+    "SELECT 1 FROM pass_subscriptions WHERE user_id = ? AND week_start = ?",
+    [req.user.id, currentWeekStart]
+  );
+  if (!subscription) {
+    return res.status(403).json({ message: "Pague o passe da semana antes de resgatar coins" });
+  }
+
+  const alreadyClaimed = await db.get(
+    "SELECT 1 FROM pass_claims WHERE user_id = ? AND claim_date = ?",
+    [req.user.id, today]
+  );
+  if (alreadyClaimed) {
+    return res.status(400).json({ message: "A recompensa de hoje ja foi resgatada" });
+  }
+
+  const rewardCoins = getDailyPassReward(now);
+  await db.run(
+    "INSERT INTO pass_claims (user_id, claim_date, week_start, reward_coins) VALUES (?, ?, ?, ?)",
+    [req.user.id, today, currentWeekStart, rewardCoins]
+  );
+  await db.run("UPDATE users SET coins_balance = coins_balance + ? WHERE id = ?", [rewardCoins, req.user.id]);
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, rewardCoins, pass });
+});
+
+app.post("/api/pass/profile/claim", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const now = new Date();
+  const currentWeekStart = weekStartISO(now);
+
+  const subscription = await db.get(
+    "SELECT 1 FROM pass_subscriptions WHERE user_id = ? AND week_start = ?",
+    [req.user.id, currentWeekStart]
+  );
+  if (!subscription) {
+    return res.status(403).json({ message: "Pague o passe da semana para liberar a recompensa final" });
+  }
+
+  const weeklyClaims = await db.get(
+    "SELECT COUNT(*) AS total FROM pass_claims WHERE user_id = ? AND week_start = ?",
+    [req.user.id, currentWeekStart]
+  );
+  if ((weeklyClaims?.total ?? 0) < 7) {
+    return res.status(400).json({ message: "Complete os 7 resgates diarios da semana para liberar a foto de perfil" });
+  }
+
+  const weeklyReward = await getCurrentWeeklyProfileReward();
+  if (!weeklyReward) {
+    return res.status(400).json({ message: "Nenhuma imagem de perfil semanal foi configurada em /public/passe-itens/perfil" });
+  }
+
+  const alreadyOwned = await db.get(
+    "SELECT id FROM user_pass_profile_rewards WHERE user_id = ? AND item_key = ?",
+    [req.user.id, weeklyReward.itemKey]
+  );
+  if (alreadyOwned) {
+    return res.status(400).json({ message: "Essa foto de perfil semanal ja foi resgatada" });
+  }
+
+  await db.run(
+    `INSERT INTO user_pass_profile_rewards (user_id, week_start, item_key, item_name, image_path)
+     VALUES (?, ?, ?, ?, ?)`,
+    [req.user.id, currentWeekStart, weeklyReward.itemKey, weeklyReward.itemName, weeklyReward.imagePath]
+  );
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_profile_image) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_profile_image = ? WHERE user_id = ?", [weeklyReward.imagePath, req.user.id]);
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, reward: weeklyReward, pass });
+});
+
+app.post("/api/pass/profile/equip/:rewardId", authMiddleware, async (req, res) => {
+  const rewardId = Number(req.params.rewardId);
+  if (!Number.isInteger(rewardId) || rewardId <= 0) {
+    return res.status(400).json({ message: "Recompensa de perfil invalida" });
+  }
+
+  const db = await getDb();
+  const reward = await db.get(
+    "SELECT id, image_path FROM user_pass_profile_rewards WHERE id = ? AND user_id = ?",
+    [rewardId, req.user.id]
+  );
+  if (!reward) {
+    return res.status(404).json({ message: "Recompensa de perfil nao encontrada" });
+  }
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_profile_image) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_profile_image = ? WHERE user_id = ?", [reward.image_path, req.user.id]);
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, pass });
+});
+
+app.post("/api/pass/profile/unequip", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_profile_image) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_profile_image = NULL WHERE user_id = ?", [req.user.id]);
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, pass });
 });
 
 app.get("/api/shop/items", authMiddleware, async (req, res) => {

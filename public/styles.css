@@ -434,6 +434,21 @@ textarea::placeholder {
   padding: 12px 16px;
 }
 
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-profile {
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 8px 18px rgba(29, 18, 65, 0.28);
+}
+
 .content {
   margin-top: 14px;
   margin-bottom: 130px;
@@ -762,7 +777,7 @@ textarea::placeholder {
   transform: translateX(-50%);
   width: min(980px, 92vw);
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   padding: 8px;
   backdrop-filter: blur(8px);
 }
@@ -801,6 +816,20 @@ textarea::placeholder {
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pass-highlight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pass-profile-card {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .pass-preview-profile {
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 
   .calendar-grid {
@@ -850,6 +879,193 @@ textarea::placeholder {
   color: #e0cfff;
   margin-top: 2px;
   letter-spacing: 0.02em;
+}
+
+.coins-balance {
+  font-size: 0.75rem;
+  color: #ffedb0;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
+/* ─── PASSE DIARIO ───────────────────────────────────────────────────────── */
+
+.pass-view-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.pass-view-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #ada2cd;
+  color: #2f2559;
+  cursor: pointer;
+}
+
+.pass-view-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.pass-view {
+  display: none;
+  gap: 12px;
+}
+
+.pass-view.active {
+  display: grid;
+}
+
+.pass-card {
+  border: 1px solid rgba(255, 240, 180, 0.18);
+  background: rgba(34, 24, 68, 0.28);
+}
+
+.pass-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pass-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.pass-highlight {
+  border: 1px solid #8e77cc;
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 6px;
+}
+
+.pass-highlight span,
+.pass-muted,
+.pass-item-card small {
+  color: #d8c7ff;
+}
+
+.pass-highlight strong {
+  font-size: 1.3rem;
+  color: #fff4bf;
+}
+
+.pass-items-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pass-rewards-preview {
+  margin-top: 14px;
+}
+
+.pass-rewards-preview h5 {
+  margin: 0 0 8px;
+  color: #f7eab8;
+}
+
+.pass-preview-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.pass-preview-card {
+  border: 1px solid #8e77cc;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(20, 14, 44, 0.24);
+  display: grid;
+  gap: 5px;
+}
+
+.pass-preview-label {
+  color: #d8c7ff;
+  font-size: 0.84rem;
+}
+
+.pass-preview-profile {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.pass-preview-profile-text {
+  display: grid;
+  gap: 4px;
+}
+
+.pass-preview-profile-text small {
+  color: #d8c7ff;
+}
+
+.pass-item-card {
+  border: 1px solid #8e77cc;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(20, 14, 44, 0.24);
+  display: grid;
+  gap: 4px;
+}
+
+.pass-profile-weekly {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+
+.pass-profile-preview {
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid #8e77cc;
+}
+
+.pass-profile-list {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+
+.pass-profile-card {
+  border: 1px solid #8e77cc;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(20, 14, 44, 0.24);
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pass-profile-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid #9b85d4;
+}
+
+.pass-profile-info {
+  display: grid;
+  gap: 4px;
+}
+
+.pass-profile-info small {
+  color: #d8c7ff;
 }
 
 /* ─── LOJA DOS SONHOS ────────────────────────────────────────────────────── */

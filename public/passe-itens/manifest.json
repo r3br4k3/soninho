@@ -1,0 +1,13 @@
+{
+  "profileRewards": {
+    "folder": "/public/passe-itens/perfil",
+    "rule": "A imagem mais recente da pasta vira a recompensa final semanal (segunda a domingo)."
+  },
+  "items": [
+    {
+      "id": "exemplo-recompensa",
+      "name": "Exemplo de recompensa",
+      "description": "Use esta pasta para adicionar futuros itens do passe."
+    }
+  ]
+}

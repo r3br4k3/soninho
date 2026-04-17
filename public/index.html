@@ -80,10 +80,14 @@
 
     <div id="appView" class="app-shell hidden">
       <header class="topbar card">
-        <div>
+        <div class="topbar-user">
+          <img id="welcomeProfileImage" class="welcome-profile hidden" src="" alt="Foto de perfil" />
+          <div>
           <p class="eyebrow">bem-vindo(a)</p>
           <h2 id="welcomeName">SONHADOR(A)</h2>
           <p id="soninhosBalance" class="soninhos-balance">✨ 0 soninhos</p>
+          <p id="coinsBalance" class="coins-balance">🪙 0 coins</p>
+          </div>
         </div>
         <button id="logoutBtn" class="btn-ghost">Sair</button>
       </header>
@@ -312,6 +316,116 @@
           <div id="shopGrid" class="shop-grid"></div>
           <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
         </section>
+
+        <section id="tab-pass" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Passe Diario</h3>
+            <p class="shop-balance-header">Coins: <span id="passCoinsBalance" class="shop-balance-value">🪙 0</span></p>
+          </div>
+
+          <div class="pass-view-tabs">
+            <button type="button" class="pass-view-btn active" data-pass-view="rewards">Recompensas</button>
+            <button type="button" class="pass-view-btn" data-pass-view="payment">Pagamento</button>
+            <button type="button" class="pass-view-btn" data-pass-view="profile">Perfil</button>
+          </div>
+
+          <div id="passRewardsView" class="pass-view active">
+            <div class="card pass-card">
+              <div class="pass-status-row">
+                <div>
+                  <h4 id="passWeekTitle">Semana atual</h4>
+                  <p id="passWeekLabel" class="pass-muted">Carregando passe...</p>
+                </div>
+                <span id="passStatusBadge" class="status-pill status-off">Inativo</span>
+              </div>
+
+              <div class="pass-highlight-grid">
+                <article class="pass-highlight">
+                  <span>Recompensa de hoje</span>
+                  <strong id="passRewardToday">🪙 20</strong>
+                </article>
+                <article class="pass-highlight">
+                  <span>Resgates na semana</span>
+                  <strong id="passClaimCount">0/7</strong>
+                </article>
+              </div>
+
+              <p id="passClaimHint" class="pass-muted">Pague o passe semanal para liberar os resgates diarios.</p>
+              <button type="button" id="passClaimBtn" class="btn-primary">Resgatar coins de hoje</button>
+              <p id="passClaimMessage" class="message"></p>
+
+              <div class="pass-rewards-preview">
+                <h5>Preview do que voce ganha</h5>
+                <div class="pass-preview-grid">
+                  <article class="pass-preview-card">
+                    <span class="pass-preview-label">Segunda a sexta</span>
+                    <strong id="passPreviewWeekday">🪙 20 coins por dia</strong>
+                  </article>
+
+                  <article class="pass-preview-card">
+                    <span class="pass-preview-label">Sabado e domingo</span>
+                    <strong id="passPreviewWeekend">🪙 100 coins por dia</strong>
+                  </article>
+
+                  <article class="pass-preview-card pass-preview-profile">
+                    <img id="passPreviewProfileImage" class="pass-profile-preview hidden" src="" alt="Preview da recompensa final semanal" />
+                    <div class="pass-preview-profile-text">
+                      <span class="pass-preview-label">Recompensa final (7/7)</span>
+                      <strong id="passPreviewProfileName">Foto de perfil semanal</strong>
+                      <small id="passPreviewProfileHint">Disponivel so nesta semana (segunda a domingo).</small>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div id="passPaymentView" class="pass-view">
+            <div class="card pass-card">
+              <h4>Assinatura semanal opcional</h4>
+              <p id="passPaymentSummary" class="pass-muted">O passe custa 100 soninhos por semana.</p>
+              <div class="pass-highlight-grid">
+                <article class="pass-highlight">
+                  <span>Segunda a sexta</span>
+                  <strong>🪙 20 coins</strong>
+                </article>
+                <article class="pass-highlight">
+                  <span>Sabado e domingo</span>
+                  <strong>🪙 100 coins</strong>
+                </article>
+              </div>
+              <button type="button" id="passPayBtn" class="btn-primary">Pagar 100 soninhos</button>
+              <p id="passPaymentMessage" class="message"></p>
+            </div>
+          </div>
+
+          <div id="passProfileView" class="pass-view">
+            <div class="card pass-card">
+              <h4>Recompensa Final da Semana</h4>
+              <p class="pass-muted">Ao completar 7/7 dias na semana (segunda a domingo), voce libera uma foto de perfil permanente.</p>
+
+              <div class="pass-profile-weekly">
+                <img id="passWeeklyProfilePreview" class="pass-profile-preview hidden" src="" alt="Recompensa semanal de perfil" />
+                <div>
+                  <strong id="passWeeklyProfileName">Nenhuma recompensa configurada</strong>
+                  <p id="passWeeklyProfileHint" class="pass-muted">Adicione imagens em /public/passe-itens/perfil.</p>
+                </div>
+              </div>
+
+              <button type="button" id="passClaimProfileBtn" class="btn-primary">Resgatar foto de perfil da semana</button>
+              <p id="passClaimProfileMessage" class="message"></p>
+            </div>
+
+            <div class="card pass-card">
+              <h4>Fotos de Perfil Desbloqueadas</h4>
+              <p id="passProfileFolder" class="pass-muted"></p>
+              <div id="passProfileRewardsList" class="pass-profile-list"></div>
+              <button type="button" id="passUnequipProfileBtn" class="btn-ghost">Remover foto de perfil ativa</button>
+              <p id="passProfileEquipMessage" class="message"></p>
+            </div>
+          </div>
+        </section>
       </main>
 
       <nav class="bottom-nav card">
@@ -322,6 +436,7 @@
         <button class="nav-btn" data-tab="reminders" title="Lembretes">⏰<span>Lembretes</span></button>
         <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
         <button class="nav-btn" data-tab="shop" title="Loja">🛍️<span>Loja</span></button>
+        <button class="nav-btn" data-tab="pass" title="Passe">🎫<span>Passe</span></button>
       </nav>
     </div>
 
