@@ -615,6 +615,27 @@ textarea::placeholder {
   flex-wrap: wrap;
 }
 
+.ranking-item {
+  font-size: 0.95rem;
+}
+
+.ranking-me {
+  background: linear-gradient(90deg, #ede7ff 0%, #fdfbff 100%);
+  border-color: #9b7fe8;
+  font-weight: 600;
+}
+
+.ranking-score {
+  font-weight: 700;
+  color: #5d4ca8;
+  white-space: nowrap;
+}
+
+.ranking-list {
+  display: grid;
+  gap: 6px;
+}
+
 .friend-item p {
   margin: 0;
 }

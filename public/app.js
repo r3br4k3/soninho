@@ -955,6 +955,67 @@ async function loadFriendsData() {
   renderFriendsList();
   renderFriendLocationOptions();
   renderFriendLocationStatusList();
+  renderTransferFriendSelect();
+}
+
+function renderTransferFriendSelect() {
+  const select = document.getElementById('transferFriendSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">Selecione um amigo</option>';
+  state.friends.forEach((friend) => {
+    const option = document.createElement('option');
+    option.value = String(friend.id);
+    option.textContent = friend.name;
+    select.appendChild(option);
+  });
+}
+
+async function loadRanking() {
+  const rankingSoninhosList = document.getElementById('rankingSoninhosList');
+  const rankingDreamsList = document.getElementById('rankingDreamsList');
+  if (!rankingSoninhosList || !rankingDreamsList) return;
+
+  try {
+    const data = await api('/api/ranking');
+    const medals = ['🥇', '🥈', '🥉'];
+
+    rankingSoninhosList.innerHTML = '';
+    if (!data.topSoninhos?.length) {
+      rankingSoninhosList.innerHTML = '<p>Nenhum dado disponivel ainda.</p>';
+    } else {
+      data.topSoninhos.forEach((user, i) => {
+        const row = document.createElement('article');
+        row.className = 'friend-item ranking-item' + (user.id === state.user?.id ? ' ranking-me' : '');
+        row.innerHTML = `
+          <p>
+            <strong>${medals[i] || `#${i + 1}`} ${escapeHtml(user.name)}</strong>${user.id === state.user?.id ? ' <em>(voce)</em>' : ''}
+          </p>
+          <span class="ranking-score">✨ ${user.soninhos}</span>
+        `;
+        rankingSoninhosList.appendChild(row);
+      });
+    }
+
+    rankingDreamsList.innerHTML = '';
+    if (!data.topDreams?.length) {
+      rankingDreamsList.innerHTML = '<p>Nenhum dado disponivel ainda.</p>';
+    } else {
+      data.topDreams.forEach((user, i) => {
+        const row = document.createElement('article');
+        row.className = 'friend-item ranking-item' + (user.id === state.user?.id ? ' ranking-me' : '');
+        row.innerHTML = `
+          <p>
+            <strong>${medals[i] || `#${i + 1}`} ${escapeHtml(user.name)}</strong>${user.id === state.user?.id ? ' <em>(voce)</em>' : ''}
+          </p>
+          <span class="ranking-score">📖 ${user.total_dreams} sonhos</span>
+        `;
+        rankingDreamsList.appendChild(row);
+      });
+    }
+  } catch (err) {
+    if (rankingSoninhosList) rankingSoninhosList.innerHTML = '<p>Erro ao carregar ranking.</p>';
+    if (rankingDreamsList) rankingDreamsList.innerHTML = '';
+  }
 }
 
 function renderTags() {
@@ -2066,6 +2127,37 @@ function attachEvents() {
     }
   });
 
+  const transferSoninhosForm = document.getElementById('transferSoninhosForm');
+  const transferMessage = document.getElementById('transferMessage');
+  if (transferSoninhosForm) {
+    transferSoninhosForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const friendId = Number(document.getElementById('transferFriendSelect')?.value);
+      const amount = Number(document.getElementById('transferAmount')?.value);
+      if (!friendId) {
+        showMessage(transferMessage, 'Selecione um amigo.', true);
+        return;
+      }
+      if (!amount || amount <= 0) {
+        showMessage(transferMessage, 'Informe um valor valido.', true);
+        return;
+      }
+      try {
+        const result = await api('/api/soninhos/transfer', {
+          method: 'POST',
+          body: JSON.stringify({ friendId, amount }),
+        });
+        showMessage(transferMessage, result.message || 'Transferencia realizada!');
+        state.soninhos = result.newBalance;
+        if (soninhosBalance) soninhosBalance.textContent = `✨ ${result.newBalance} soninhos`;
+        if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${result.newBalance}`;
+        document.getElementById('transferAmount').value = '';
+      } catch (err) {
+        showMessage(transferMessage, err.message, true);
+      }
+    });
+  }
+
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tab = btn.dataset.tab;
@@ -2074,6 +2166,7 @@ function attachEvents() {
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'shop') await loadShopData();
       if (tab === 'pass') await loadPassData();
+      if (tab === 'ranking') await loadRanking();
       if (tab === 'friends') {
         await loadFriendsData();
         if (friendLocationSelect.value) {

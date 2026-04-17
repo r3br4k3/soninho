@@ -1440,6 +1440,76 @@ app.post("/api/admin/users/:userId/purchases/toggle", authMiddleware, requireAdm
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Ranking Global ──────────────────────────────────────────────────────────
+
+app.get("/api/ranking", authMiddleware, async (req, res) => {
+  const db = await getDb();
+
+  const topSoninhos = await db.all(
+    `SELECT id, name, soninhos_balance AS soninhos
+     FROM users
+     ORDER BY soninhos_balance DESC
+     LIMIT 10`
+  );
+
+  const topDreams = await db.all(
+    `SELECT u.id, u.name, COUNT(d.id) AS total_dreams
+     FROM users u
+     LEFT JOIN dreams d ON d.user_id = u.id
+     GROUP BY u.id
+     ORDER BY total_dreams DESC
+     LIMIT 10`
+  );
+
+  return res.json({ topSoninhos, topDreams });
+});
+
+// ─── Transferência de Soninhos ────────────────────────────────────────────────
+
+app.post("/api/soninhos/transfer", authMiddleware, async (req, res) => {
+  const amount = Number(req.body?.amount);
+  const friendId = Number(req.body?.friendId);
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return res.status(400).json({ message: "Valor invalido para transferencia" });
+  }
+  if (!Number.isInteger(friendId) || friendId <= 0) {
+    return res.status(400).json({ message: "Amigo invalido" });
+  }
+  if (friendId === req.user.id) {
+    return res.status(400).json({ message: "Nao e possivel transferir para si mesmo" });
+  }
+
+  const db = await getDb();
+
+  const isFriend = await areFriends(db, req.user.id, friendId);
+  if (!isFriend) {
+    return res.status(403).json({ message: "Voce so pode transferir soninhos para amigos" });
+  }
+
+  const sender = await db.get("SELECT id, name, soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  if (!sender || sender.soninhos_balance < amount) {
+    return res.status(400).json({ message: "Saldo insuficiente de soninhos" });
+  }
+
+  const receiver = await db.get("SELECT id, name FROM users WHERE id = ?", [friendId]);
+  if (!receiver) {
+    return res.status(404).json({ message: "Amigo nao encontrado" });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [amount, req.user.id]);
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance + ? WHERE id = ?", [amount, friendId]);
+
+  const updated = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+
+  return res.json({
+    message: `Voce transferiu ✨ ${amount} soninhos para ${receiver.name}!`,
+    newBalance: updated.soninhos_balance,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
