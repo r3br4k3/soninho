@@ -81,12 +81,11 @@
     <div id="appView" class="app-shell hidden">
       <header class="topbar card">
         <div class="topbar-user">
-          <img id="welcomeProfileImage" class="welcome-profile hidden" src="" alt="Foto de perfil" />
+          <img id="welcomeProfileImage" class="welcome-profile" src="/avatar-boneco-sem-rosto.svg" alt="Foto de perfil" />
           <div>
-          <p class="eyebrow">bem-vindo(a)</p>
-          <h2 id="welcomeName">SONHADOR(A)</h2>
-          <p id="soninhosBalance" class="soninhos-balance">✨ 0 soninhos</p>
-          <p id="coinsBalance" class="coins-balance">🪙 0 coins</p>
+            <p class="eyebrow">bem-vindo(a)</p>
+            <h2 id="welcomeName">SONHADOR(A)</h2>
+            <p id="soninhosBalance" class="soninhos-balance">✨ 0 soninhos</p>
           </div>
         </div>
         <button id="logoutBtn" class="btn-ghost">Sair</button>
@@ -320,7 +319,7 @@
         <section id="tab-pass" class="tab-panel">
           <div class="card panel-head">
             <h3>Passe Diario</h3>
-            <p class="shop-balance-header">Coins: <span id="passCoinsBalance" class="shop-balance-value">🪙 0</span></p>
+            <p class="shop-balance-header">Soninhos: <span id="passSoninhosDisplay" class="shop-balance-value">✨ 0</span></p>
           </div>
 
           <div class="pass-view-tabs">
@@ -342,7 +341,7 @@
               <div class="pass-highlight-grid">
                 <article class="pass-highlight">
                   <span>Recompensa de hoje</span>
-                  <strong id="passRewardToday">🪙 20</strong>
+                  <strong id="passRewardToday">✨ 20</strong>
                 </article>
                 <article class="pass-highlight">
                   <span>Resgates na semana</span>
@@ -351,7 +350,7 @@
               </div>
 
               <p id="passClaimHint" class="pass-muted">Pague o passe semanal para liberar os resgates diarios.</p>
-              <button type="button" id="passClaimBtn" class="btn-primary">Resgatar coins de hoje</button>
+              <button type="button" id="passClaimBtn" class="btn-primary">Resgatar soninhos de hoje</button>
               <p id="passClaimMessage" class="message"></p>
 
               <div class="pass-rewards-preview">
@@ -359,18 +358,18 @@
                 <div class="pass-preview-grid">
                   <article class="pass-preview-card">
                     <span class="pass-preview-label">Segunda a sexta</span>
-                    <strong id="passPreviewWeekday">🪙 20 coins por dia</strong>
+                    <strong id="passPreviewWeekday">✨ 20 soninhos por dia</strong>
                   </article>
 
                   <article class="pass-preview-card">
                     <span class="pass-preview-label">Sabado e domingo</span>
-                    <strong id="passPreviewWeekend">🪙 100 coins por dia</strong>
+                    <strong id="passPreviewWeekend">✨ 100 soninhos por dia</strong>
                   </article>
 
                   <article class="pass-preview-card pass-preview-profile">
                     <img id="passPreviewProfileImage" class="pass-profile-preview hidden" src="" alt="Preview da recompensa final semanal" />
                     <div class="pass-preview-profile-text">
-                      <span class="pass-preview-label">Recompensa final (7/7)</span>
+                      <span class="pass-preview-label">Recompensa semanal de perfil</span>
                       <strong id="passPreviewProfileName">Foto de perfil semanal</strong>
                       <small id="passPreviewProfileHint">Disponivel so nesta semana (segunda a domingo).</small>
                     </div>
@@ -388,11 +387,11 @@
               <div class="pass-highlight-grid">
                 <article class="pass-highlight">
                   <span>Segunda a sexta</span>
-                  <strong>🪙 20 coins</strong>
+                  <strong>✨ 20 soninhos</strong>
                 </article>
                 <article class="pass-highlight">
                   <span>Sabado e domingo</span>
-                  <strong>🪙 100 coins</strong>
+                  <strong>✨ 100 soninhos</strong>
                 </article>
               </div>
               <button type="button" id="passPayBtn" class="btn-primary">Pagar 100 soninhos</button>
@@ -403,7 +402,7 @@
           <div id="passProfileView" class="pass-view">
             <div class="card pass-card">
               <h4>Recompensa Final da Semana</h4>
-              <p class="pass-muted">Ao completar 7/7 dias na semana (segunda a domingo), voce libera uma foto de perfil permanente.</p>
+              <p class="pass-muted">Ao comprar o passe da semana (segunda a domingo), voce pode resgatar 1 foto de perfil permanente.</p>
 
               <div class="pass-profile-weekly">
                 <img id="passWeeklyProfilePreview" class="pass-profile-preview hidden" src="" alt="Recompensa semanal de perfil" />
@@ -418,10 +417,8 @@
             </div>
 
             <div class="card pass-card">
-              <h4>Fotos de Perfil Desbloqueadas</h4>
-              <p id="passProfileFolder" class="pass-muted"></p>
+              <h4>Fotos de Perfil Disponiveis</h4>
               <div id="passProfileRewardsList" class="pass-profile-list"></div>
-              <button type="button" id="passUnequipProfileBtn" class="btn-ghost">Remover foto de perfil ativa</button>
               <p id="passProfileEquipMessage" class="message"></p>
             </div>
           </div>

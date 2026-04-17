@@ -168,7 +168,7 @@ async function getPassStatus(db, userId) {
     [userId, currentWeekStart]
   );
   const user = await db.get(
-    "SELECT soninhos_balance, coins_balance FROM users WHERE id = ?",
+    "SELECT soninhos_balance FROM users WHERE id = ?",
     [userId]
   );
   const equipped = await db.get(
@@ -176,6 +176,7 @@ async function getPassStatus(db, userId) {
     [userId]
   );
   const passItems = await listPassItems();
+  const profileCatalog = await listPassProfileRewardFiles();
   const currentWeeklyProfileReward = await getCurrentWeeklyProfileReward();
   const ownedProfileRewards = await db.all(
     `SELECT id, week_start, item_key, item_name, image_path, claimed_at
@@ -189,7 +190,6 @@ async function getPassStatus(db, userId) {
     : false;
   const canClaimWeeklyProfileReward = Boolean(
     subscription
-      && weeklyClaims.length >= 7
       && currentWeeklyProfileReward
       && !alreadyOwnsCurrentProfileReward
   );
@@ -205,7 +205,6 @@ async function getPassStatus(db, userId) {
     weeklyClaimCount: weeklyClaims.length,
     weeklyClaims,
     soninhosBalance: user?.soninhos_balance ?? 0,
-    coinsBalance: user?.coins_balance ?? 0,
     weeklyPrice: WEEKLY_PASS_PRICE,
     weekdayReward: DAILY_PASS_REWARD,
     weekendReward: WEEKEND_PASS_REWARD,
@@ -222,6 +221,11 @@ async function getPassStatus(db, userId) {
           imagePath: currentWeeklyProfileReward.imagePath,
         }
       : null,
+    profileCatalog: profileCatalog.map((item) => ({
+      itemKey: item.itemKey,
+      itemName: item.itemName,
+      imagePath: item.imagePath,
+    })),
     ownedProfileRewards,
   };
 }
@@ -402,7 +406,7 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
   const db = await getDb();
-  const user = await db.get("SELECT id, name, email, created_at, soninhos_balance, coins_balance FROM users WHERE id = ?", [req.user.id]);
+  const user = await db.get("SELECT id, name, email, created_at, soninhos_balance FROM users WHERE id = ?", [req.user.id]);
   return res.json({ user });
 });
 
@@ -910,8 +914,8 @@ app.get("/api/stats", authMiddleware, async (req, res) => {
 
 app.get("/api/shop/balance", authMiddleware, async (req, res) => {
   const db = await getDb();
-  const user = await db.get("SELECT soninhos_balance, coins_balance FROM users WHERE id = ?", [req.user.id]);
-  return res.json({ balance: user?.soninhos_balance ?? 0, coinsBalance: user?.coins_balance ?? 0 });
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  return res.json({ balance: user?.soninhos_balance ?? 0 });
 });
 
 app.get("/api/pass/status", authMiddleware, async (req, res) => {
@@ -961,7 +965,7 @@ app.post("/api/pass/claim", authMiddleware, async (req, res) => {
     [req.user.id, currentWeekStart]
   );
   if (!subscription) {
-    return res.status(403).json({ message: "Pague o passe da semana antes de resgatar coins" });
+    return res.status(403).json({ message: "Pague o passe da semana antes de resgatar soninhos" });
   }
 
   const alreadyClaimed = await db.get(
@@ -977,10 +981,10 @@ app.post("/api/pass/claim", authMiddleware, async (req, res) => {
     "INSERT INTO pass_claims (user_id, claim_date, week_start, reward_coins) VALUES (?, ?, ?, ?)",
     [req.user.id, today, currentWeekStart, rewardCoins]
   );
-  await db.run("UPDATE users SET coins_balance = coins_balance + ? WHERE id = ?", [rewardCoins, req.user.id]);
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance + ? WHERE id = ?", [rewardCoins, req.user.id]);
 
   const pass = await getPassStatus(db, req.user.id);
-  return res.json({ success: true, rewardCoins, pass });
+  return res.json({ success: true, rewardSoninhos: rewardCoins, pass });
 });
 
 app.post("/api/pass/profile/claim", authMiddleware, async (req, res) => {
@@ -994,14 +998,6 @@ app.post("/api/pass/profile/claim", authMiddleware, async (req, res) => {
   );
   if (!subscription) {
     return res.status(403).json({ message: "Pague o passe da semana para liberar a recompensa final" });
-  }
-
-  const weeklyClaims = await db.get(
-    "SELECT COUNT(*) AS total FROM pass_claims WHERE user_id = ? AND week_start = ?",
-    [req.user.id, currentWeekStart]
-  );
-  if ((weeklyClaims?.total ?? 0) < 7) {
-    return res.status(400).json({ message: "Complete os 7 resgates diarios da semana para liberar a foto de perfil" });
   }
 
   const weeklyReward = await getCurrentWeeklyProfileReward();
@@ -1052,6 +1048,31 @@ app.post("/api/pass/profile/equip/:rewardId", authMiddleware, async (req, res) =
     [req.user.id]
   );
   await db.run("UPDATE user_equipped SET active_profile_image = ? WHERE user_id = ?", [reward.image_path, req.user.id]);
+
+  const pass = await getPassStatus(db, req.user.id);
+  return res.json({ success: true, pass });
+});
+
+app.post("/api/pass/profile/equip-by-path", authMiddleware, async (req, res) => {
+  const imagePath = String(req.body?.imagePath || "").trim();
+  if (!imagePath) {
+    return res.status(400).json({ message: "Imagem de perfil invalida" });
+  }
+
+  const db = await getDb();
+  const owned = await db.get(
+    "SELECT id, image_path FROM user_pass_profile_rewards WHERE user_id = ? AND image_path = ?",
+    [req.user.id, imagePath]
+  );
+  if (!owned) {
+    return res.status(403).json({ message: "Voce precisa resgatar essa foto antes de equipar" });
+  }
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_profile_image) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_profile_image = ? WHERE user_id = ?", [owned.image_path, req.user.id]);
 
   const pass = await getPassStatus(db, req.user.id);
   return res.json({ success: true, pass });

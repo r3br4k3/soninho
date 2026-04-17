@@ -881,13 +881,6 @@ textarea::placeholder {
   letter-spacing: 0.02em;
 }
 
-.coins-balance {
-  font-size: 0.75rem;
-  color: #ffedb0;
-  margin-top: 2px;
-  letter-spacing: 0.02em;
-}
-
 /* ─── PASSE DIARIO ───────────────────────────────────────────────────────── */
 
 .pass-view-tabs {

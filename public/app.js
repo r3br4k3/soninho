@@ -27,7 +27,6 @@ const state = {
   locationWatchId: null,
   friendLocationPollId: null,
   soninhos: 0,
-  coins: 0,
   shopItems: [],
   customWallpapers: [],
   equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null },
@@ -43,7 +42,6 @@ const state = {
     todayClaimReward: 0,
     weeklyClaimCount: 0,
     soninhosBalance: 0,
-    coinsBalance: 0,
     weeklyPrice: 100,
     weekdayReward: 20,
     weekendReward: 100,
@@ -71,7 +69,6 @@ const registerForm = document.getElementById('registerForm');
 const welcomeName = document.getElementById('welcomeName');
 const welcomeProfileImage = document.getElementById('welcomeProfileImage');
 const logoutBtn = document.getElementById('logoutBtn');
-const coinsBalance = document.getElementById('coinsBalance');
 const dreamDate = document.getElementById('dreamDate');
 const dreamForm = document.getElementById('dreamForm');
 const dreamMessage = document.getElementById('dreamMessage');
@@ -109,7 +106,7 @@ const soninhosBalance = document.getElementById('soninhosBalance');
 const shopGrid = document.getElementById('shopGrid');
 const shopMessage = document.getElementById('shopMessage');
 const shopBalanceDisplay = document.getElementById('shopBalanceDisplay');
-const passCoinsBalance = document.getElementById('passCoinsBalance');
+const passSoninhosDisplay = document.getElementById('passSoninhosDisplay');
 const shopWallpaperCard = document.getElementById('shopWallpaperCard');
 const customWallpaperForm = document.getElementById('customWallpaperForm');
 const customWallpaperUrl = document.getElementById('customWallpaperUrl');
@@ -150,10 +147,10 @@ const passWeeklyProfileName = document.getElementById('passWeeklyProfileName');
 const passWeeklyProfileHint = document.getElementById('passWeeklyProfileHint');
 const passClaimProfileBtn = document.getElementById('passClaimProfileBtn');
 const passClaimProfileMessage = document.getElementById('passClaimProfileMessage');
-const passProfileFolder = document.getElementById('passProfileFolder');
 const passProfileRewardsList = document.getElementById('passProfileRewardsList');
-const passUnequipProfileBtn = document.getElementById('passUnequipProfileBtn');
 const passProfileEquipMessage = document.getElementById('passProfileEquipMessage');
+
+const DEFAULT_PROFILE_AVATAR = '/avatar-boneco-sem-rosto.svg';
 
 const ADMIN_TRIGGER_KEY = 'william';
 
@@ -672,7 +669,6 @@ function logout() {
   state.user = null;
   state.token = '';
   state.soninhos = 0;
-  state.coins = 0;
   state.equipped = { active_font: null, active_tag_effect: null, active_wallpaper: null };
   state.pass = {
     active: false,
@@ -684,7 +680,6 @@ function logout() {
     todayClaimReward: 0,
     weeklyClaimCount: 0,
     soninhosBalance: 0,
-    coinsBalance: 0,
     weeklyPrice: 100,
     weekdayReward: 20,
     weekendReward: 100,
@@ -1255,23 +1250,21 @@ function activatePassView(viewName) {
 function applyProfileBadge(imagePath) {
   if (!welcomeProfileImage) return;
 
-  if (imagePath) {
-    welcomeProfileImage.src = imagePath;
-    welcomeProfileImage.classList.remove('hidden');
-    return;
-  }
-
-  welcomeProfileImage.src = '';
-  welcomeProfileImage.classList.add('hidden');
+  welcomeProfileImage.src = imagePath || DEFAULT_PROFILE_AVATAR;
+  welcomeProfileImage.classList.remove('hidden');
 }
 
 function renderPassProfileRewards() {
   if (!passProfileRewardsList) return;
   passProfileRewardsList.innerHTML = '';
 
-  const rewards = Array.isArray(state.pass.ownedProfileRewards) ? state.pass.ownedProfileRewards : [];
+  const rewards = Array.isArray(state.pass.profileCatalog) ? state.pass.profileCatalog : [];
+  const ownedSet = new Set(
+    (Array.isArray(state.pass.ownedProfileRewards) ? state.pass.ownedProfileRewards : [])
+      .map((item) => item.image_path)
+  );
   if (!rewards.length) {
-    passProfileRewardsList.innerHTML = '<p class="pass-muted">Voce ainda nao desbloqueou fotos de perfil do passe.</p>';
+    passProfileRewardsList.innerHTML = '<p class="pass-muted">Nenhuma foto de perfil encontrada nas pastas do passe.</p>';
     return;
   }
 
@@ -1281,29 +1274,31 @@ function renderPassProfileRewards() {
 
     const preview = document.createElement('img');
     preview.className = 'pass-profile-thumb';
-    preview.src = reward.image_path;
-    preview.alt = `Foto de perfil ${reward.item_name}`;
+    preview.src = reward.imagePath;
+    preview.alt = `Foto de perfil ${reward.itemName}`;
 
     const info = document.createElement('div');
     info.className = 'pass-profile-info';
-    info.innerHTML = `
-      <strong>${escapeHtml(reward.item_name)}</strong>
-      <small>Liberado em: ${formatDateTime(reward.claimed_at)}</small>
-    `;
+    info.innerHTML = `<strong>${escapeHtml(reward.itemName)}</strong>`;
 
     const actions = document.createElement('div');
     actions.className = 'shop-item-actions';
 
-    const isActive = reward.image_path === state.pass.activeProfileImage;
-    const equipBtn = document.createElement('button');
-    equipBtn.type = 'button';
-    equipBtn.className = isActive ? 'btn-ghost' : 'btn-primary';
-    equipBtn.textContent = isActive ? 'Ativa' : 'Ativar';
-    equipBtn.disabled = isActive;
-    equipBtn.addEventListener('click', async () => {
-      await equipPassProfileReward(reward.id);
+    const isActive = reward.imagePath === state.pass.activeProfileImage;
+    const isOwned = ownedSet.has(reward.imagePath);
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = isActive ? 'btn-ghost' : (isOwned ? 'btn-primary' : 'btn-ghost');
+    toggleBtn.textContent = isActive ? 'Remover' : (isOwned ? 'Equipar' : 'Resgatar primeiro');
+    toggleBtn.disabled = !isActive && !isOwned;
+    toggleBtn.addEventListener('click', async () => {
+      if (isActive) {
+        await unequipPassProfileReward();
+      } else {
+        await equipPassProfileImage(reward.imagePath);
+      }
     });
-    actions.appendChild(equipBtn);
+    actions.appendChild(toggleBtn);
 
     card.appendChild(preview);
     card.appendChild(info);
@@ -1325,21 +1320,21 @@ function renderPass() {
   passStatusBadge.textContent = isActive ? 'Ativo' : 'Inativo';
   passStatusBadge.classList.toggle('status-on', isActive);
   passStatusBadge.classList.toggle('status-off', !isActive);
-  passRewardToday.textContent = `🪙 ${state.pass.todayReward || 0}`;
+  passRewardToday.textContent = `✨ ${state.pass.todayReward || 0}`;
   passClaimCount.textContent = `${state.pass.weeklyClaimCount || 0}/7`;
   if (passPreviewWeekday) {
-    passPreviewWeekday.textContent = `🪙 ${state.pass.weekdayReward || 20} coins por dia`;
+    passPreviewWeekday.textContent = `✨ ${state.pass.weekdayReward || 20} soninhos por dia`;
   }
   if (passPreviewWeekend) {
-    passPreviewWeekend.textContent = `🪙 ${state.pass.weekendReward || 100} coins por dia`;
+    passPreviewWeekend.textContent = `✨ ${state.pass.weekendReward || 100} soninhos por dia`;
   }
   passClaimHint.textContent = isActive
     ? (state.pass.todayClaimed
-      ? `Hoje ja foi resgatado: +🪙 ${state.pass.todayClaimReward || state.pass.todayReward || 0}.`
-      : 'Seu passe esta ativo. Resgate os coins de hoje agora.')
+      ? `Hoje ja foi resgatado: +✨ ${state.pass.todayClaimReward || state.pass.todayReward || 0}.`
+      : 'Seu passe esta ativo. Resgate os soninhos de hoje agora.')
     : 'Pague o passe semanal na aba de pagamento para liberar os resgates diarios.';
   passClaimBtn.disabled = !isActive || state.pass.todayClaimed;
-  passClaimBtn.textContent = state.pass.todayClaimed ? 'Coins de hoje ja resgatados' : 'Resgatar coins de hoje';
+  passClaimBtn.textContent = state.pass.todayClaimed ? 'Soninhos de hoje ja resgatados' : 'Resgatar soninhos de hoje';
 
   if (passPaymentSummary) {
     passPaymentSummary.textContent = isActive
@@ -1384,7 +1379,7 @@ function renderPass() {
   if (passWeeklyProfileHint) {
     const profileStatusText = state.pass.weeklyProfileRewardClaimed
       ? 'Foto da semana ja resgatada. Ela e permanente no seu inventario.'
-      : `Progresso da semana: ${state.pass.weeklyClaimCount || 0}/7 resgates diarios.`;
+      : 'Com o passe ativo, voce pode resgatar a foto semanal agora.';
     passWeeklyProfileHint.textContent = `${profileStatusText} Se nao resgatar ate domingo, a recompensa da semana expira.`;
   }
   if (passClaimProfileBtn) {
@@ -1392,12 +1387,6 @@ function renderPass() {
     passClaimProfileBtn.textContent = state.pass.weeklyProfileRewardClaimed
       ? 'Foto semanal ja resgatada'
       : 'Resgatar foto de perfil da semana';
-  }
-  if (passProfileFolder) {
-    passProfileFolder.textContent = `Pasta de imagens de perfil: ${state.pass.profileItemsFolder || '/passe-itens/perfil/'}`;
-  }
-  if (passUnequipProfileBtn) {
-    passUnequipProfileBtn.disabled = !state.pass.activeProfileImage;
   }
 
   applyProfileBadge(state.pass.activeProfileImage || null);
@@ -1410,8 +1399,7 @@ function updateSoninhosDisplay() {
   const txt = `✨ ${state.soninhos} soninhos`;
   if (soninhosBalance) soninhosBalance.textContent = txt;
   if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${state.soninhos}`;
-  if (coinsBalance) coinsBalance.textContent = `🪙 ${state.coins} coins`;
-  if (passCoinsBalance) passCoinsBalance.textContent = `🪙 ${state.coins}`;
+  if (passSoninhosDisplay) passSoninhosDisplay.textContent = `✨ ${state.soninhos}`;
 }
 
 function applyWallpaper(pathValue) {
@@ -1562,7 +1550,6 @@ async function loadShopData() {
       api('/api/shop/wallpapers'),
     ]);
     state.soninhos = balanceData.balance ?? 0;
-    state.coins = balanceData.coinsBalance ?? state.coins;
     state.shopItems = shopData.items || [];
     state.customWallpapers = wallpapersData.wallpapers || [];
     state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null };
@@ -1588,7 +1575,6 @@ async function loadPassData() {
       ...(data.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
     updateSoninhosDisplay();
     renderPass();
   } catch (err) {
@@ -1604,7 +1590,6 @@ async function subscribeToPass() {
       ...(result.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
     updateSoninhosDisplay();
     renderPass();
     showMessage(passPaymentMessage, 'Passe semanal pago com sucesso.');
@@ -1621,10 +1606,9 @@ async function claimPassReward() {
       ...(result.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
     updateSoninhosDisplay();
     renderPass();
-    showMessage(passClaimMessage, `Resgate concluido: +🪙 ${result.rewardCoins} coins.`);
+    showMessage(passClaimMessage, `Resgate concluido: +✨ ${result.rewardSoninhos} soninhos.`);
   } catch (err) {
     showMessage(passClaimMessage, err.message, true);
   }
@@ -1638,7 +1622,6 @@ async function claimPassProfileReward() {
       ...(result.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
     updateSoninhosDisplay();
     renderPass();
     showMessage(passClaimProfileMessage, `Foto de perfil desbloqueada: ${result.reward?.itemName || 'recompensa semanal'}!`);
@@ -1655,7 +1638,25 @@ async function equipPassProfileReward(rewardId) {
       ...(result.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
+    updateSoninhosDisplay();
+    renderPass();
+    showMessage(passProfileEquipMessage, 'Foto de perfil ativada com sucesso.');
+  } catch (err) {
+    showMessage(passProfileEquipMessage, err.message, true);
+  }
+}
+
+async function equipPassProfileImage(imagePath) {
+  try {
+    const result = await api('/api/pass/profile/equip-by-path', {
+      method: 'POST',
+      body: JSON.stringify({ imagePath }),
+    });
+    state.pass = {
+      ...state.pass,
+      ...(result.pass || {}),
+    };
+    state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
     updateSoninhosDisplay();
     renderPass();
     showMessage(passProfileEquipMessage, 'Foto de perfil ativada com sucesso.');
@@ -1672,7 +1673,6 @@ async function unequipPassProfileReward() {
       ...(result.pass || {}),
     };
     state.soninhos = state.pass.soninhosBalance ?? state.soninhos;
-    state.coins = state.pass.coinsBalance ?? state.coins;
     updateSoninhosDisplay();
     renderPass();
     showMessage(passProfileEquipMessage, 'Foto de perfil removida.');
@@ -2137,12 +2137,6 @@ function attachEvents() {
   if (passClaimProfileBtn) {
     passClaimProfileBtn.addEventListener('click', async () => {
       await claimPassProfileReward();
-    });
-  }
-
-  if (passUnequipProfileBtn) {
-    passUnequipProfileBtn.addEventListener('click', async () => {
-      await unequipPassProfileReward();
     });
   }
 
