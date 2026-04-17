@@ -518,6 +518,8 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .tag-chip.tag-customizable {
@@ -552,6 +554,11 @@ textarea::placeholder {
   border-radius: 8px;
   border: 1px solid #c7b7f1;
   background: #f0e8ff;
+}
+
+#tagForm input[type="text"] {
+  flex: 1 1 180px;
+  min-width: 0;
 }
 
 .tag-chip button {
@@ -890,6 +897,70 @@ textarea::placeholder {
     min-width: 92px;
     scroll-snap-align: start;
     font-size: 1.6rem;
+  }
+
+  #tab-tags .card {
+    overflow-x: hidden;
+  }
+
+  .tag-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .tag-chip {
+    width: 100%;
+    border-radius: 16px;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .tag-chip span,
+  .tag-chip label,
+  .tag-chip strong {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .tag-effect-select,
+  .tag-save-btn,
+  .tag-color-picker {
+    flex: 1 1 auto;
+  }
+
+  .tag-effect-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #tagForm {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  #tagForm button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .tag-chip {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .tag-color-picker {
+    flex: 0 0 42px;
+  }
+
+  .tag-save-btn,
+  .tag-chip button {
+    min-height: 38px;
+  }
+
+  #tagForm {
+    grid-template-columns: 1fr;
   }
 }
 
