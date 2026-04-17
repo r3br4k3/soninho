@@ -972,49 +972,68 @@ function renderTransferFriendSelect() {
   });
 }
 
+function buildRankingRow(user, i, scoreText, isMe) {
+  const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+  const prefix = medals[i] || ('#' + (i + 1));
+  const row = document.createElement('article');
+  row.className = 'friend-item ranking-item' + (isMe ? ' ranking-me' : '');
+
+  const p = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = prefix + ' ' + (user.name || '—');
+  p.appendChild(strong);
+  if (isMe) {
+    const em = document.createElement('em');
+    em.textContent = ' (voce)';
+    p.appendChild(em);
+  }
+
+  const score = document.createElement('span');
+  score.className = 'ranking-score';
+  score.textContent = scoreText;
+
+  row.appendChild(p);
+  row.appendChild(score);
+  return row;
+}
+
 async function loadRanking() {
   if (!rankingSoninhosList || !rankingDreamsList) return;
 
+  rankingSoninhosList.innerHTML = '<p>Carregando...</p>';
+  rankingDreamsList.innerHTML = '<p>Carregando...</p>';
+
   try {
     const data = await api('/api/ranking');
-    const medals = ['🥇', '🥈', '🥉'];
 
     rankingSoninhosList.innerHTML = '';
-    if (!data.topSoninhos?.length) {
+    if (!data.topSoninhos || !data.topSoninhos.length) {
       rankingSoninhosList.innerHTML = '<p>Nenhum dado disponivel ainda.</p>';
     } else {
       data.topSoninhos.forEach((user, i) => {
-        const row = document.createElement('article');
-        row.className = 'friend-item ranking-item' + (user.id === state.user?.id ? ' ranking-me' : '');
-        row.innerHTML = `
-          <p>
-            <strong>${medals[i] || `#${i + 1}`} ${escapeHtml(user.name)}</strong>${user.id === state.user?.id ? ' <em>(voce)</em>' : ''}
-          </p>
-          <span class="ranking-score">✨ ${user.soninhos}</span>
-        `;
+        const isMe = state.user && user.id === state.user.id;
+        const row = buildRankingRow(user, i, '\u2728 ' + (user.soninhos || 0) + ' soninhos', isMe);
         rankingSoninhosList.appendChild(row);
       });
     }
 
     rankingDreamsList.innerHTML = '';
-    if (!data.topDreams?.length) {
+    if (!data.topDreams || !data.topDreams.length) {
       rankingDreamsList.innerHTML = '<p>Nenhum dado disponivel ainda.</p>';
     } else {
       data.topDreams.forEach((user, i) => {
-        const row = document.createElement('article');
-        row.className = 'friend-item ranking-item' + (user.id === state.user?.id ? ' ranking-me' : '');
-        row.innerHTML = `
-          <p>
-            <strong>${medals[i] || `#${i + 1}`} ${escapeHtml(user.name)}</strong>${user.id === state.user?.id ? ' <em>(voce)</em>' : ''}
-          </p>
-          <span class="ranking-score">📖 ${user.total_dreams} sonhos</span>
-        `;
+        const isMe = state.user && user.id === state.user.id;
+        const row = buildRankingRow(user, i, '\uD83D\uDCD6 ' + (user.total_dreams || 0) + ' sonhos', isMe);
         rankingDreamsList.appendChild(row);
       });
     }
   } catch (err) {
-    rankingSoninhosList.innerHTML = `<p>${escapeHtml(err.message || 'Erro ao carregar ranking.')}</p>`;
-    rankingDreamsList.innerHTML = '<p>Nao foi possivel carregar o ranking global.</p>';
+    const msg = (err && err.message) ? err.message : 'Erro ao carregar ranking.';
+    rankingSoninhosList.innerHTML = '';
+    const p = document.createElement('p');
+    p.textContent = msg;
+    rankingSoninhosList.appendChild(p);
+    rankingDreamsList.innerHTML = '';
   }
 }
 
