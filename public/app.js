@@ -85,6 +85,8 @@ const totalDreams = document.getElementById('totalDreams');
 const importantDreams = document.getElementById('importantDreams');
 const topTags = document.getElementById('topTags');
 const monthBars = document.getElementById('monthBars');
+const rankingSoninhosList = document.getElementById('rankingSoninhosList');
+const rankingDreamsList = document.getElementById('rankingDreamsList');
 const reminderForm = document.getElementById('reminderForm');
 const reminderTime = document.getElementById('reminderTime');
 const reminderMessage = document.getElementById('reminderMessage');
@@ -971,8 +973,6 @@ function renderTransferFriendSelect() {
 }
 
 async function loadRanking() {
-  const rankingSoninhosList = document.getElementById('rankingSoninhosList');
-  const rankingDreamsList = document.getElementById('rankingDreamsList');
   if (!rankingSoninhosList || !rankingDreamsList) return;
 
   try {
@@ -1013,8 +1013,8 @@ async function loadRanking() {
       });
     }
   } catch (err) {
-    if (rankingSoninhosList) rankingSoninhosList.innerHTML = '<p>Erro ao carregar ranking.</p>';
-    if (rankingDreamsList) rankingDreamsList.innerHTML = '';
+    rankingSoninhosList.innerHTML = `<p>${escapeHtml(err.message || 'Erro ao carregar ranking.')}</p>`;
+    rankingDreamsList.innerHTML = '<p>Nao foi possivel carregar o ranking global.</p>';
   }
 }
 
@@ -1246,7 +1246,10 @@ async function renderCalendar() {
 
 async function loadStats() {
   const query = state.selectedOwnerId === 'me' ? '' : `?userId=${encodeURIComponent(state.selectedOwnerId)}`;
-  const stats = await api(`/api/stats${query}`);
+  const [stats] = await Promise.all([
+    api(`/api/stats${query}`),
+    loadRanking(),
+  ]);
   totalDreams.textContent = String(stats.totals.totalDreams || 0);
   importantDreams.textContent = String(stats.totals.importantDreams || 0);
 
@@ -2166,7 +2169,6 @@ function attachEvents() {
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'shop') await loadShopData();
       if (tab === 'pass') await loadPassData();
-      if (tab === 'ranking') await loadRanking();
       if (tab === 'friends') {
         await loadFriendsData();
         if (friendLocationSelect.value) {
