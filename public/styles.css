@@ -1650,3 +1650,105 @@ body.font-courier #dreamContent {
 .tag-chip.tag-anim-float {
   animation: tagFloat 1.6s ease-in-out infinite;
 }
+
+/* ─── OTIMIZAÇÕES PARA MOBILE ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Reduzir uso de blur em mobile */
+  .sparkle,
+  .sparkle::before,
+  .sparkle::after {
+    filter: none !important;
+  }
+
+  /* Remover shadows caros */
+  .card {
+    box-shadow: none !important;
+    border: 1px solid rgba(25, 37, 33, 0.06);
+  }
+
+  .shop-item-card:hover {
+    box-shadow: none !important;
+  }
+
+  .welcome-profile {
+    box-shadow: none;
+  }
+
+  .pass-profile-preview {
+    box-shadow: none;
+  }
+
+  .shop-theme-color-swatch {
+    box-shadow: none !important;
+  }
+
+  .shop-theme-swatch {
+    box-shadow: none;
+  }
+
+  /* Desativar transições caras em mobile */
+  * {
+    transition: none !important;
+  }
+
+  /* Re-ativar apenas transições essenciais */
+  .tab-panel {
+    animation: slideUp 0.25s ease;
+  }
+
+  /* Otimizar animações - reduzir duração */
+  @keyframes twinkle {
+    from {
+      opacity: 0.36;
+      transform: none;
+    }
+    to {
+      opacity: 0.62;
+      transform: none;
+    }
+  }
+
+  @keyframes sparklePulse {
+    0%, 100% {
+      opacity: 0.1;
+      transform: scale(0.7);
+      filter: none;
+    }
+    40% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    55% {
+      opacity: 0.7;
+      transform: scale(1.1);
+      filter: none;
+    }
+  }
+
+  /* Reduzir animações de tags em mobile */
+  .tag-chip.tag-anim-blink {
+    animation: tagBlink 1.5s steps(2, jump-none) infinite;
+  }
+
+  .tag-chip.tag-anim-pulse {
+    animation: tagPulse 1.5s ease-in-out infinite;
+  }
+
+  .tag-chip.tag-anim-float {
+    animation: tagFloat 2s ease-in-out infinite;
+  }
+
+  /* Usar transform para hardware acceleration em animações */
+  .nav-btn.active {
+    background: #e7ddff;
+    transform: translateZ(0);
+  }
+
+  .day-cell:hover {
+    transform: none;
+  }
+
+  .shop-item-card:hover {
+    transform: none;
+  }
+}

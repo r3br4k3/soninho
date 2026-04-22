@@ -1,3 +1,23 @@
+// Utilitários de Performance
+function debounce(func, delay) {
+  let timeoutId;
+  return function(...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+}
+
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
 function pad2(value) {
   return String(value).padStart(2, '0');
 }
@@ -1098,8 +1118,10 @@ function renderTags() {
       applyTagColorPreview(chip, colorInput.value);
     };
 
+    const debouncedSyncColorPreview = debounce(syncColorPreview, 150);
+
     colorInput.addEventListener('input', () => {
-      syncColorPreview();
+      debouncedSyncColorPreview();
     });
 
     save.addEventListener('click', async () => {
@@ -2576,11 +2598,15 @@ function attachEvents() {
   }
 
   if (customThemeColor) {
+    const debouncedUpdateThemePreview = debounce((previewColor) => {
+      updateThemeLivePreview(previewColor);
+    }, 150);
+
     customThemeColor.addEventListener('input', () => {
       const previewColor = customThemeColor.value;
       if (customThemePreview) customThemePreview.style.background = previewColor;
       if (customThemeLabel) customThemeLabel.textContent = `Previa: ${previewColor.toUpperCase()}`;
-      updateThemeLivePreview(previewColor);
+      debouncedUpdateThemePreview(previewColor);
     });
   }
 
