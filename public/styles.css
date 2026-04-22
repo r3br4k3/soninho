@@ -1559,11 +1559,50 @@ body.font-courier #dreamContent {
   100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; }
 }
 
+@keyframes rgbCycleFloat {
+  0%   { background: #ff0080; box-shadow: 0 0 8px #ff0080; transform: translateY(0); }
+  20%  { background: #a000ff; box-shadow: 0 0 8px #a000ff; transform: translateY(-2px); }
+  40%  { background: #0050ff; box-shadow: 0 0 8px #0050ff; transform: translateY(-2px); }
+  60%  { background: #00e0c0; box-shadow: 0 0 8px #00e0c0; transform: translateY(-2px); }
+  80%  { background: #80ff00; box-shadow: 0 0 8px #80ff00; transform: translateY(0); }
+  100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; transform: translateY(0); }
+}
+
+@keyframes rgbCyclePulse {
+  0%   { background: #ff0080; box-shadow: 0 0 8px #ff0080; transform: scale(1); }
+  20%  { background: #a000ff; box-shadow: 0 0 8px #a000ff; transform: scale(1.07); }
+  40%  { background: #0050ff; box-shadow: 0 0 8px #0050ff; transform: scale(1.07); }
+  60%  { background: #00e0c0; box-shadow: 0 0 8px #00e0c0; transform: scale(1.07); }
+  80%  { background: #80ff00; box-shadow: 0 0 8px #80ff00; transform: scale(1); }
+  100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; transform: scale(1); }
+}
+
+@keyframes rgbCycleBlink {
+  0%   { background: #ff0080; box-shadow: 0 0 8px #ff0080; opacity: 1; }
+  20%  { background: #a000ff; box-shadow: 0 0 8px #a000ff; opacity: 1; }
+  40%  { background: #0050ff; box-shadow: 0 0 8px #0050ff; opacity: 0.35; }
+  60%  { background: #00e0c0; box-shadow: 0 0 8px #00e0c0; opacity: 0.35; }
+  80%  { background: #80ff00; box-shadow: 0 0 8px #80ff00; opacity: 1; }
+  100% { background: #ff0080; box-shadow: 0 0 8px #ff0080; opacity: 1; }
+}
+
 .tag-chip.tag-rgb {
   animation: rgbCycle 3s linear infinite !important;
   color: #fff !important;
   border: none !important;
   text-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+
+.tag-chip.tag-rgb.tag-anim-float {
+  animation: rgbCycleFloat 3s linear infinite !important;
+}
+
+.tag-chip.tag-rgb.tag-anim-pulse {
+  animation: rgbCyclePulse 3s linear infinite !important;
+}
+
+.tag-chip.tag-rgb.tag-anim-blink {
+  animation: rgbCycleBlink 3s linear infinite !important;
 }
 
 /* Fontes aplicadas diretamente nas tags personalizadas */
