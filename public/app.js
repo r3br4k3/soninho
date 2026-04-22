@@ -94,8 +94,6 @@ const dreamDate = document.getElementById('dreamDate');
 const dreamForm = document.getElementById('dreamForm');
 const dreamContentInput = document.getElementById('dreamContent');
 const dreamMessage = document.getElementById('dreamMessage');
-const dreamVoiceBtn = document.getElementById('dreamVoiceBtn');
-const dreamVoiceStatus = document.getElementById('dreamVoiceStatus');
 const dreamList = document.getElementById('dreamList');
 const tagForm = document.getElementById('tagForm');
 const tagList = document.getElementById('tagList');
@@ -185,10 +183,6 @@ const passProfileEquipMessage = document.getElementById('passProfileEquipMessage
 const DEFAULT_PROFILE_AVATAR = '/avatar-boneco-sem-rosto.svg';
 
 const ADMIN_TRIGGER_KEY = 'william';
-const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-let dreamSpeechRecognition = null;
-let isDreamListening = false;
-let dreamSpeechBaseText = '';
 
 function adminApi(path, options = {}) {
   return api(path, {
@@ -649,129 +643,11 @@ function updateJournalComposeState() {
   controls.forEach((control) => {
     control.disabled = !editable;
   });
-  if (dreamVoiceBtn) {
-    const voiceSupported = Boolean(SpeechRecognitionCtor);
-    dreamVoiceBtn.disabled = !editable || !voiceSupported;
-  }
 
   if (!editable) {
-    stopDreamVoiceInput();
     showMessage(dreamMessage, `Visualizando ${selectedOwnerLabel()}. Para escrever, selecione Meu diario.`);
   } else if (dreamMessage.textContent.includes('Visualizando')) {
     dreamMessage.textContent = '';
-  }
-}
-
-function setDreamVoiceUiState() {
-  if (!dreamVoiceBtn || !dreamVoiceStatus) return;
-
-  if (!SpeechRecognitionCtor) {
-    dreamVoiceBtn.disabled = true;
-    dreamVoiceBtn.textContent = 'Ditado indisponivel';
-    dreamVoiceStatus.textContent = 'Seu navegador nao suporta reconhecimento de voz';
-    return;
-  }
-
-  if (isDreamListening) {
-    dreamVoiceBtn.textContent = 'Parar ditado';
-    dreamVoiceStatus.textContent = 'Ouvindo... fale agora';
-    return;
-  }
-
-  dreamVoiceBtn.textContent = 'Ditar por voz (pt-BR)';
-  dreamVoiceStatus.textContent = 'Toque para comecar o ditado';
-}
-
-function buildMergedSpeechText(baseText, transcript) {
-  const safeBase = (baseText || '').trimEnd();
-  const safeTranscript = (transcript || '').trim();
-  if (!safeTranscript) return safeBase;
-  if (!safeBase) return safeTranscript;
-  return `${safeBase} ${safeTranscript}`;
-}
-
-function stopDreamVoiceInput() {
-  if (dreamSpeechRecognition && isDreamListening) {
-    try {
-      dreamSpeechRecognition.stop();
-    } catch {
-      // sem acao
-    }
-  }
-  isDreamListening = false;
-  setDreamVoiceUiState();
-}
-
-function ensureDreamSpeechRecognition() {
-  if (!SpeechRecognitionCtor) return null;
-  if (dreamSpeechRecognition) return dreamSpeechRecognition;
-
-  const recognition = new SpeechRecognitionCtor();
-  recognition.lang = 'pt-BR';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    isDreamListening = true;
-    setDreamVoiceUiState();
-  };
-
-  recognition.onresult = (event) => {
-    if (!dreamContentInput) return;
-    let transcript = '';
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      transcript += event.results[i][0].transcript || '';
-    }
-    dreamContentInput.value = buildMergedSpeechText(dreamSpeechBaseText, transcript);
-  };
-
-  recognition.onend = () => {
-    isDreamListening = false;
-    setDreamVoiceUiState();
-  };
-
-  recognition.onerror = (event) => {
-    isDreamListening = false;
-    setDreamVoiceUiState();
-
-    if (event?.error === 'not-allowed') {
-      showMessage(dreamMessage, 'Permita o microfone para usar ditado por voz.', true);
-      return;
-    }
-    if (event?.error === 'no-speech') {
-      showMessage(dreamMessage, 'Nao detectei fala. Tente novamente.', true);
-      return;
-    }
-    showMessage(dreamMessage, 'Falha no reconhecimento de voz. Tente novamente.', true);
-  };
-
-  dreamSpeechRecognition = recognition;
-  return dreamSpeechRecognition;
-}
-
-function toggleDreamVoiceInput() {
-  if (state.selectedOwnerId !== 'me') {
-    showMessage(dreamMessage, 'Troque para Meu diario para ditar o texto.', true);
-    return;
-  }
-
-  const recognition = ensureDreamSpeechRecognition();
-  if (!recognition || !dreamContentInput) {
-    showMessage(dreamMessage, 'Reconhecimento de voz indisponivel neste navegador.', true);
-    return;
-  }
-
-  if (isDreamListening) {
-    stopDreamVoiceInput();
-    return;
-  }
-
-  dreamSpeechBaseText = dreamContentInput.value || '';
-  try {
-    recognition.start();
-  } catch {
-    // Evita erro ao iniciar duas vezes rapidamente
   }
 }
 
@@ -2439,7 +2315,6 @@ function attachEvents() {
         return;
       }
 
-      stopDreamVoiceInput();
       const mood = document.getElementById('dreamMood').value;
       const payload = {
         title: buildAutoDreamTitle(dreamDate.value, mood),
@@ -2457,7 +2332,6 @@ function attachEvents() {
       });
 
       dreamForm.reset();
-  setDreamVoiceUiState();
       dreamDate.value = state.selectedCalendarDate;
       const earned = result.soninhosEarned ?? 0;
       showMessage(dreamMessage, `Sonho salvo! Voce ganhou ✨ ${earned} soninhos.`);
@@ -2661,12 +2535,6 @@ function attachEvents() {
     });
   }
 
-  if (dreamVoiceBtn) {
-    dreamVoiceBtn.addEventListener('click', () => {
-      toggleDreamVoiceInput();
-    });
-  }
-
   if (adminUserSelect) {
     adminUserSelect.addEventListener('change', () => {
       updateAdminPurchaseState();
@@ -2740,7 +2608,6 @@ async function registerServiceWorker() {
 async function init() {
   await initDeviceId();
   attachEvents();
-  setDreamVoiceUiState();
   activatePassView(state.passView);
   await registerServiceWorker();
 

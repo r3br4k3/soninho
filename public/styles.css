@@ -505,18 +505,6 @@ textarea::placeholder {
   gap: 8px;
 }
 
-.dream-voice-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.dream-voice-status {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
 .small-title {
   margin: 0 0 8px;
   font-size: 0.86rem;
@@ -825,7 +813,7 @@ textarea::placeholder {
   transform: translateX(-50%);
   width: min(980px, 92vw);
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   padding: 8px;
   backdrop-filter: blur(8px);
 }
