@@ -291,10 +291,11 @@
 
           <div id="shopThemeCard" class="card shop-wallpaper-card hidden">
             <h4>Cor Personalizada do Site</h4>
-            <p class="shop-wallpaper-help">Escolha uma cor na roda. Cada nova aplicacao custa <strong>✨ 120 soninhos</strong>.</p>
+            <p class="shop-wallpaper-help">Escolha uma cor. Cada cor nova custa <strong>✨ 120 soninhos</strong>. Cores ja compradas podem ser usadas gratuitamente.</p>
             <form id="customThemeForm" class="inline-form shop-wallpaper-form">
               <input type="color" id="customThemeColor" value="#7f6edc" />
-              <button type="submit" class="btn-primary">Aplicar por 120</button>
+              <button type="button" id="customThemePreviewBtn" class="btn-ghost">Preview</button>
+              <button type="submit" class="btn-primary" id="customThemeSubmitBtn">Comprar por 120</button>
               <button type="button" id="removeCustomThemeBtn" class="btn-ghost">Restaurar tema padrao</button>
             </form>
             <p id="customThemeStatus" class="message"></p>
@@ -302,6 +303,12 @@
               <span class="shop-theme-swatch" id="customThemePreview"></span>
               <small id="customThemeLabel">Tema atual: padrao</small>
             </div>
+            <div id="customThemeColorPreviewBar" class="shop-theme-live-preview">
+              <div class="shop-theme-preview-pill" id="previewAccentPill">Accent</div>
+              <div class="shop-theme-preview-pill" id="previewBgPill">Fundo</div>
+              <div class="shop-theme-preview-pill" id="previewPaperPill">Card</div>
+            </div>
+            <div id="customThemeColorList" class="shop-wallpaper-list"></div>
           </div>
 
           <div id="shopWallpaperCard" class="card shop-wallpaper-card hidden">

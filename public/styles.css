@@ -1225,6 +1225,33 @@ textarea::placeholder {
   color: #e8dcff;
 }
 
+.shop-theme-live-preview {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.shop-theme-preview-pill {
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(255,255,255,0.35);
+  transition: background 0.2s, color 0.2s;
+  min-width: 60px;
+  text-align: center;
+}
+
+.shop-theme-color-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.5);
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+}
+
 .shop-theme-swatch {
   width: 44px;
   height: 44px;

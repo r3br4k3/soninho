@@ -1294,29 +1294,94 @@ app.post("/api/shop/theme/custom", authMiddleware, async (req, res) => {
   }
 
   const db = await getDb();
-  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
-  const balance = user?.soninhos_balance ?? 0;
-  if (balance < CUSTOM_THEME_COLOR_PRICE) {
-    return res.status(400).json({
-      message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${CUSTOM_THEME_COLOR_PRICE}`,
-    });
+
+  // Verifica se a cor ja foi comprada antes
+  const existing = await db.get(
+    "SELECT id FROM user_theme_colors WHERE user_id = ? AND LOWER(color) = LOWER(?)",
+    [req.user.id, color]
+  );
+
+  if (!existing) {
+    // Precisa pagar para adicionar ao acervo
+    const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+    const balance = user?.soninhos_balance ?? 0;
+    if (balance < CUSTOM_THEME_COLOR_PRICE) {
+      return res.status(400).json({
+        message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${CUSTOM_THEME_COLOR_PRICE}`,
+      });
+    }
+    await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [CUSTOM_THEME_COLOR_PRICE, req.user.id]);
+    await db.run(
+      "INSERT OR IGNORE INTO user_theme_colors (user_id, color, price_paid) VALUES (?, ?, ?)",
+      [req.user.id, color.toUpperCase(), CUSTOM_THEME_COLOR_PRICE]
+    );
   }
 
   await db.run(
     "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_theme_color) VALUES (?, NULL, NULL, NULL, NULL)",
     [req.user.id]
   );
-
-  const equipped = await db.get("SELECT active_theme_color FROM user_equipped WHERE user_id = ?", [req.user.id]);
-  if (String(equipped?.active_theme_color || "").toLowerCase() === color.toLowerCase()) {
-    return res.status(400).json({ message: "Essa cor ja esta em uso" });
-  }
-
-  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [CUSTOM_THEME_COLOR_PRICE, req.user.id]);
-  await db.run("UPDATE user_equipped SET active_theme_color = ? WHERE user_id = ?", [color, req.user.id]);
+  await db.run("UPDATE user_equipped SET active_theme_color = ? WHERE user_id = ?", [color.toUpperCase(), req.user.id]);
 
   const userAfter = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
-  return res.json({ success: true, color, newBalance: userAfter.soninhos_balance });
+  return res.json({ success: true, color: color.toUpperCase(), newBalance: userAfter.soninhos_balance, alreadyOwned: !!existing });
+});
+
+app.get("/api/shop/theme/colors", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const equipped = await db.get("SELECT active_theme_color FROM user_equipped WHERE user_id = ?", [req.user.id]);
+  const colors = await db.all(
+    "SELECT id, color, price_paid, created_at FROM user_theme_colors WHERE user_id = ? ORDER BY created_at DESC, id DESC",
+    [req.user.id]
+  );
+  return res.json({
+    colors: colors.map((c) => ({
+      ...c,
+      active: String(equipped?.active_theme_color || "").toUpperCase() === c.color.toUpperCase(),
+    })),
+  });
+});
+
+app.post("/api/shop/theme/use/:colorId", authMiddleware, async (req, res) => {
+  const colorId = Number(req.params.colorId);
+  if (!Number.isInteger(colorId) || colorId <= 0) {
+    return res.status(400).json({ message: "Cor invalida" });
+  }
+  const db = await getDb();
+  const entry = await db.get(
+    "SELECT id, color FROM user_theme_colors WHERE id = ? AND user_id = ?",
+    [colorId, req.user.id]
+  );
+  if (!entry) return res.status(404).json({ message: "Cor nao encontrada no acervo" });
+
+  await db.run(
+    "INSERT OR IGNORE INTO user_equipped (user_id, active_font, active_tag_effect, active_wallpaper, active_theme_color) VALUES (?, NULL, NULL, NULL, NULL)",
+    [req.user.id]
+  );
+  await db.run("UPDATE user_equipped SET active_theme_color = ? WHERE user_id = ?", [entry.color, req.user.id]);
+  return res.json({ success: true, color: entry.color });
+});
+
+app.post("/api/shop/theme/delete/:colorId", authMiddleware, async (req, res) => {
+  const colorId = Number(req.params.colorId);
+  if (!Number.isInteger(colorId) || colorId <= 0) {
+    return res.status(400).json({ message: "Cor invalida" });
+  }
+  const db = await getDb();
+  const entry = await db.get(
+    "SELECT id, color FROM user_theme_colors WHERE id = ? AND user_id = ?",
+    [colorId, req.user.id]
+  );
+  if (!entry) return res.status(404).json({ message: "Cor nao encontrada no acervo" });
+
+  await db.run("DELETE FROM user_theme_colors WHERE id = ?", [colorId]);
+
+  // Se a cor deletada estava ativa, remove do equipped
+  const equipped = await db.get("SELECT active_theme_color FROM user_equipped WHERE user_id = ?", [req.user.id]);
+  if (String(equipped?.active_theme_color || "").toUpperCase() === entry.color.toUpperCase()) {
+    await db.run("UPDATE user_equipped SET active_theme_color = NULL WHERE user_id = ?", [req.user.id]);
+  }
+  return res.json({ success: true });
 });
 
 app.post("/api/shop/theme/remove", authMiddleware, async (req, res) => {

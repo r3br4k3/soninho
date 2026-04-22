@@ -140,6 +140,16 @@ export async function getDb() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS user_theme_colors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      color TEXT NOT NULL,
+      price_paid INTEGER NOT NULL DEFAULT 120,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, color),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS pass_subscriptions (
       user_id INTEGER NOT NULL,
       week_start TEXT NOT NULL,

@@ -29,6 +29,7 @@ const state = {
   soninhos: 0,
   shopItems: [],
   customWallpapers: [],
+  customThemeColors: [],
   equipped: { active_font: null, active_tag_effect: null, active_wallpaper: null, active_theme_color: null },
   shopFilter: 'all',
   passView: 'rewards',
@@ -116,6 +117,9 @@ const customThemeStatus = document.getElementById('customThemeStatus');
 const removeCustomThemeBtn = document.getElementById('removeCustomThemeBtn');
 const customThemePreview = document.getElementById('customThemePreview');
 const customThemeLabel = document.getElementById('customThemeLabel');
+const customThemeColorList = document.getElementById('customThemeColorList');
+const customThemeSubmitBtn = document.getElementById('customThemeSubmitBtn');
+const customThemePreviewBtn = document.getElementById('customThemePreviewBtn');
 const shopWallpaperCard = document.getElementById('shopWallpaperCard');
 const customWallpaperForm = document.getElementById('customWallpaperForm');
 const customWallpaperUrl = document.getElementById('customWallpaperUrl');
@@ -1587,6 +1591,120 @@ function applyThemeColor(colorValue) {
   if (customThemeLabel) customThemeLabel.textContent = `Tema atual: ${accent.toUpperCase()}`;
 }
 
+let themePreviewTimeout = null;
+const themePreviewBackup = { oldColor: null, previewColor: null };
+
+function previewThemeColorTemporary(colorValue) {
+  if (themePreviewTimeout) clearTimeout(themePreviewTimeout);
+  themePreviewBackup.oldColor = state.equipped.active_theme_color;
+  themePreviewBackup.previewColor = colorValue; // Armazena a cor do preview
+  applyThemeColor(colorValue);
+  themePreviewTimeout = setTimeout(() => {
+    applyThemeColor(themePreviewBackup.oldColor || null);
+    themePreviewTimeout = null;
+    // Manter as pills e input mostrando a cor que estava em preview
+    updateThemeLivePreview(themePreviewBackup.previewColor);
+    if (customThemeColor) {
+      customThemeColor.value = themePreviewBackup.previewColor;
+    }
+    if (customThemePreview) {
+      customThemePreview.style.background = themePreviewBackup.previewColor;
+    }
+  }, 5000);
+}
+
+function updateThemeLivePreview(colorValue) {
+  const previewAccent = document.getElementById('previewAccentPill');
+  const previewBg = document.getElementById('previewBgPill');
+  const previewPaper = document.getElementById('previewPaperPill');
+  if (!previewAccent) return;
+  const accent = colorValue;
+  const bg = mixHexColors(accent, '#b09ae8', 0.35);
+  const paper = mixHexColors(accent, '#d7c7ff', 0.45);
+  previewAccent.style.background = accent;
+  previewAccent.style.color = getContrastInk(mixHexColors(accent, '#ffffff', 0.55));
+  previewBg.style.background = bg;
+  previewBg.style.color = getContrastInk(mixHexColors(bg, '#ffffff', 0.55));
+  previewPaper.style.background = paper;
+  previewPaper.style.color = getContrastInk(mixHexColors(paper, '#ffffff', 0.55));
+
+  if (customThemeSubmitBtn) {
+    const owned = state.customThemeColors.some(
+      (c) => c.color.toUpperCase() === colorValue.toUpperCase()
+    );
+    customThemeSubmitBtn.textContent = owned ? 'Usar (gratuito)' : 'Comprar por 120';
+  }
+}
+
+function renderCustomThemeColors() {
+  if (!customThemeColorList) return;
+  customThemeColorList.innerHTML = '';
+
+  if (!state.customThemeColors.length) {
+    customThemeColorList.innerHTML = '<p class="shop-wallpaper-empty">Nenhuma cor comprada ainda.</p>';
+    return;
+  }
+
+  state.customThemeColors.forEach((entry) => {
+    const card = document.createElement('article');
+    card.className = `shop-wallpaper-item${entry.active ? ' shop-wallpaper-item-active' : ''}`;
+
+    const swatch = document.createElement('div');
+    swatch.className = 'shop-theme-color-swatch';
+    swatch.style.background = entry.color;
+    swatch.title = entry.color;
+
+    const info = document.createElement('div');
+    info.className = 'shop-wallpaper-info';
+    info.innerHTML = `
+      <strong style="color:${entry.color}">${entry.color}</strong>
+      <small>${entry.active ? 'Em uso' : 'Salvo'}</small>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'shop-item-actions';
+
+    const useBtn = document.createElement('button');
+    useBtn.type = 'button';
+    useBtn.className = 'btn-primary';
+    useBtn.textContent = entry.active ? 'Usando' : 'Usar';
+    useBtn.disabled = Boolean(entry.active);
+    useBtn.addEventListener('click', async () => {
+      try {
+        await api(`/api/shop/theme/use/${encodeURIComponent(entry.id)}`, { method: 'POST' });
+        await loadShopData();
+        showMessage(customThemeStatus, 'Cor aplicada permanentemente.');
+      } catch (err) {
+        showMessage(customThemeStatus, err.message, true);
+      }
+    });
+
+    if (entry.active) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn-ghost';
+      removeBtn.textContent = 'Restaurar padrão';
+      removeBtn.addEventListener('click', async () => {
+        try {
+          await removeCustomThemeColor();
+          await loadShopData();
+          showMessage(customThemeStatus, 'Tema padrão restaurado.');
+        } catch (err) {
+          showMessage(customThemeStatus, err.message, true);
+        }
+      });
+      actions.appendChild(removeBtn);
+    }
+
+    actions.appendChild(useBtn);
+
+    card.appendChild(swatch);
+    card.appendChild(info);
+    card.appendChild(actions);
+    customThemeColorList.appendChild(card);
+  });
+}
+
 function applyWallpaper(pathValue) {
   if (pathValue) {
     document.body.style.setProperty('--user-wallpaper', `url("${pathValue}")`);
@@ -1643,6 +1761,8 @@ function renderShop() {
 
   if (state.shopFilter === 'theme') {
     applyThemeColor(state.equipped.active_theme_color || null);
+    updateThemeLivePreview(customThemeColor ? customThemeColor.value : '#7f6edc');
+    renderCustomThemeColors();
     return;
   }
 
@@ -1739,14 +1859,16 @@ function renderShop() {
 
 async function loadShopData() {
   try {
-    const [balanceData, shopData, wallpapersData] = await Promise.all([
+    const [balanceData, shopData, wallpapersData, themeColorsData] = await Promise.all([
       api('/api/shop/balance'),
       api('/api/shop/items'),
       api('/api/shop/wallpapers'),
+      api('/api/shop/theme/colors'),
     ]);
     state.soninhos = balanceData.balance ?? 0;
     state.shopItems = shopData.items || [];
     state.customWallpapers = wallpapersData.wallpapers || [];
+    state.customThemeColors = themeColorsData.colors || [];
     state.equipped = shopData.equipped || { active_font: null, active_tag_effect: null, active_wallpaper: null, active_theme_color: null };
     if (customWallpaperUrl && state.equipped.active_wallpaper) {
       customWallpaperUrl.value = '';
@@ -2022,6 +2144,15 @@ async function removeCustomWallpaper() {
   }
 }
 
+async function previewOnlyCustomThemeColor(colorValue) {
+  try {
+    previewThemeColorTemporary(colorValue);
+    showMessage(customThemeStatus, 'Preview (5 segundos)...');
+  } catch (err) {
+    showMessage(customThemeStatus, err.message, true);
+  }
+}
+
 async function applyCustomThemeColor(colorValue) {
   try {
     const result = await api('/api/shop/theme/custom', {
@@ -2032,7 +2163,10 @@ async function applyCustomThemeColor(colorValue) {
     state.equipped.active_theme_color = result.color;
     updateSoninhosDisplay();
     applyThemeColor(result.color);
-    showMessage(customThemeStatus, `Cor aplicada com sucesso. Saldo: ✨ ${result.newBalance}.`);
+    const msg = result.alreadyOwned
+      ? `Cor aplicada (ja era sua). Saldo: ✨ ${result.newBalance}.`
+      : `Cor comprada e aplicada! Saldo: ✨ ${result.newBalance}.`;
+    showMessage(customThemeStatus, msg);
     await loadShopData();
   } catch (err) {
     showMessage(customThemeStatus, err.message, true);
@@ -2434,11 +2568,19 @@ function attachEvents() {
     });
   }
 
+  if (customThemePreviewBtn) {
+    customThemePreviewBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      previewOnlyCustomThemeColor(customThemeColor?.value || '');
+    });
+  }
+
   if (customThemeColor) {
     customThemeColor.addEventListener('input', () => {
       const previewColor = customThemeColor.value;
       if (customThemePreview) customThemePreview.style.background = previewColor;
       if (customThemeLabel) customThemeLabel.textContent = `Previa: ${previewColor.toUpperCase()}`;
+      updateThemeLivePreview(previewColor);
     });
   }
 
