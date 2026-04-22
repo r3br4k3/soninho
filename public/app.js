@@ -111,10 +111,6 @@ const topTags = document.getElementById('topTags');
 const monthBars = document.getElementById('monthBars');
 const rankingSoninhosList = document.getElementById('rankingSoninhosList');
 const rankingDreamsList = document.getElementById('rankingDreamsList');
-const reminderForm = document.getElementById('reminderForm');
-const reminderTime = document.getElementById('reminderTime');
-const reminderMessage = document.getElementById('reminderMessage');
-const testReminderBtn = document.getElementById('testReminderBtn');
 const journalOwnerSelect = document.getElementById('journalOwnerSelect');
 const friendSearchForm = document.getElementById('friendSearchForm');
 const friendQuery = document.getElementById('friendQuery');
@@ -2349,63 +2345,6 @@ async function bootstrapAppData() {
   }
 }
 
-function getReminderStorage() {
-  const raw = localStorage.getItem('soninhos_reminder');
-  return raw ? JSON.parse(raw) : null;
-}
-
-function scheduleReminder(time) {
-  localStorage.setItem('soninhos_reminder', JSON.stringify({ time }));
-  reminderTime.value = time;
-  showMessage(reminderMessage, `Lembrete diario ativo para ${time}.`);
-}
-
-function millisUntilNextTime(time) {
-  const [hour, minute] = time.split(':').map(Number);
-  const now = new Date();
-  const next = new Date();
-  next.setHours(hour, minute, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
-  return next.getTime() - now.getTime();
-}
-
-async function showReminderNotification(body) {
-  if (!('serviceWorker' in navigator)) {
-    throw new Error('Service Worker nao suportado neste dispositivo.');
-  }
-
-  const reg = await navigator.serviceWorker.ready;
-  await reg.showNotification('SONINHOS', {
-    body,
-    tag: 'daily-dream-reminder',
-    renotify: true,
-    badge: '/icone.ico',
-    icon: '/icone.ico'
-  });
-}
-
-function startReminderLoop() {
-  const cfg = getReminderStorage();
-  if (!cfg?.time) return;
-
-  const timeout = millisUntilNextTime(cfg.time);
-  setTimeout(async () => {
-    if (Notification.permission === 'granted') {
-      await showReminderNotification('Registre seu sonho antes de esquecer.');
-    }
-    startReminderLoop();
-  }, timeout);
-}
-
-async function ensureNotificationPermission() {
-  if (!('Notification' in window)) {
-    throw new Error('Notificacoes nao suportadas neste navegador.');
-  }
-  if (Notification.permission === 'granted') return;
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error('Permissao de notificacao negada.');
-}
-
 function attachEvents() {
   tabLogin.addEventListener('click', () => switchAuthTab('login'));
   tabRegister.addEventListener('click', () => switchAuthTab('register'));
@@ -2627,27 +2566,6 @@ function attachEvents() {
     });
   });
 
-  reminderForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try {
-      await ensureNotificationPermission();
-      scheduleReminder(reminderTime.value);
-      startReminderLoop();
-    } catch (err) {
-      showMessage(reminderMessage, err.message, true);
-    }
-  });
-
-  testReminderBtn.addEventListener('click', async () => {
-    try {
-      await ensureNotificationPermission();
-      await showReminderNotification('Teste de notificacao funcionando.');
-      showMessage(reminderMessage, 'Teste enviado.');
-    } catch (err) {
-      showMessage(reminderMessage, err.message, true);
-    }
-  });
-
   document.querySelectorAll('.shop-cat-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.shop-cat-btn').forEach((b) => b.classList.remove('active'));
@@ -2825,12 +2743,6 @@ async function init() {
   setDreamVoiceUiState();
   activatePassView(state.passView);
   await registerServiceWorker();
-
-  const reminder = getReminderStorage();
-  if (reminder?.time) {
-    reminderTime.value = reminder.time;
-    startReminderLoop();
-  }
 
   if (state.user && state.token) {
     try {
