@@ -161,9 +161,7 @@ async function updateGardenXp(db, userId, xpEarned) {
 }
 
 function slotUpgradePrice(maxSlots) {
-  const current = Math.max(GARDEN_BASE_SLOTS, Number(maxSlots) || GARDEN_BASE_SLOTS);
-  const bought = current - GARDEN_BASE_SLOTS;
-  return 40 + (bought * 38);
+  return 200;
 }
 
 async function ensureGardenOffersForCycle(db, userId, cycleKey, level) {
