@@ -1917,6 +1917,27 @@ app.post("/api/admin/users/:userId/purchases/toggle", authMiddleware, requireAdm
   return res.json({ success: true, owned });
 });
 
+app.post("/api/admin/users/:userId/password", authMiddleware, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const newPassword = String(req.body?.newPassword || "").trim();
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Usuario invalido" });
+  }
+  if (!newPassword || newPassword.length < 4) {
+    return res.status(400).json({ message: "A nova senha precisa ter pelo menos 4 caracteres" });
+  }
+
+  const db = await getDb();
+  const user = await db.get("SELECT id, name FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ message: "Usuario nao encontrado" });
+
+  const hash = await bcrypt.hash(newPassword, 10);
+  await db.run("UPDATE users SET password_hash = ? WHERE id = ?", [hash, userId]);
+
+  return res.json({ success: true, message: `Senha de ${user.name} alterada com sucesso.` });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Ranking Global ──────────────────────────────────────────────────────────

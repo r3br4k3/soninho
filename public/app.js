@@ -168,6 +168,8 @@ const adminTogglePurchaseBtn = document.getElementById('adminTogglePurchaseBtn')
 const adminPurchaseState = document.getElementById('adminPurchaseState');
 const adminStatus = document.getElementById('adminStatus');
 const adminAccountsList = document.getElementById('adminAccountsList');
+const adminNewPassword = document.getElementById('adminNewPassword');
+const adminResetPasswordBtn = document.getElementById('adminResetPasswordBtn');
 const passWeekTitle = document.getElementById('passWeekTitle');
 const passWeekLabel = document.getElementById('passWeekLabel');
 const passStatusBadge = document.getElementById('passStatusBadge');
@@ -3692,6 +3694,31 @@ function attachEvents() {
   if (adminTogglePurchaseBtn) {
     adminTogglePurchaseBtn.addEventListener('click', async () => {
       await toggleSelectedUserPurchase();
+    });
+  }
+
+  if (adminResetPasswordBtn) {
+    adminResetPasswordBtn.addEventListener('click', async () => {
+      const user = getAdminSelectedUser();
+      if (!user) {
+        showMessage(adminStatus, 'Selecione uma conta.', true);
+        return;
+      }
+      const newPassword = adminNewPassword?.value?.trim();
+      if (!newPassword || newPassword.length < 4) {
+        showMessage(adminStatus, 'Digite uma senha com pelo menos 4 caracteres.', true);
+        return;
+      }
+      try {
+        const result = await adminApi(`/api/admin/users/${encodeURIComponent(user.id)}/password`, {
+          method: 'POST',
+          body: JSON.stringify({ newPassword }),
+        });
+        showMessage(adminStatus, result.message || 'Senha alterada com sucesso.');
+        if (adminNewPassword) adminNewPassword.value = '';
+      } catch (err) {
+        showMessage(adminStatus, err.message, true);
+      }
     });
   }
 
