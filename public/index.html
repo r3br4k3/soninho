@@ -345,6 +345,95 @@
           <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
         </section>
 
+        <section id="tab-garden" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Jardim dos Sonhos</h3>
+            <p class="shop-balance-header">Saldo: <span id="gardenBalance" class="shop-balance-value">✨ 0</span></p>
+          </div>
+
+          <div class="garden-stats-grid">
+            <article class="card stat-card">
+              <p>Nivel do jardim</p>
+              <strong id="gardenLevel">1</strong>
+            </article>
+            <article class="card stat-card">
+              <p>XP atual</p>
+              <strong id="gardenXp">0 / 24</strong>
+            </article>
+          </div>
+
+          <div class="card garden-card garden-visual-card">
+            <div class="garden-row-head">
+              <h4>Seu Jardim em Tempo Real</h4>
+              <div class="garden-visual-controls">
+                <button type="button" id="gardenEditModeBtn" class="btn-ghost garden-edit-btn" title="Modo edicao do jardim">⚙️ Editar</button>
+                <small id="gardenEditHint" class="pass-muted">Crescimento visual por tipo de flor</small>
+              </div>
+            </div>
+            <div id="gardenVisual" class="garden-visual-grid"></div>
+          </div>
+
+          <div class="card garden-card">
+            <div class="garden-row-head">
+              <h4>Espacos de Plantio</h4>
+              <button type="button" id="gardenBuySlotBtn" class="btn-primary">Desbloquear espaco</button>
+            </div>
+            <p id="gardenSlotInfo" class="pass-muted">Carregando espacos...</p>
+            <div id="gardenSlots" class="garden-slots-grid"></div>
+            <p id="gardenMessage" class="message"></p>
+          </div>
+
+          <div class="card garden-card">
+            <h4>Loja de Sementes</h4>
+            <p class="pass-muted">Compre sementes com soninhos. Plantas raras exigem nivel maior.</p>
+            <div id="gardenSeeds" class="garden-market-grid"></div>
+          </div>
+
+          <div class="card garden-card">
+            <div class="garden-row-head">
+              <h4>Upgrades de Plantacao (rotativos)</h4>
+              <small id="gardenOfferTimer" class="pass-muted">Atualizando...</small>
+            </div>
+            <p class="pass-muted">As ofertas mudam a cada 5 minutos e o estoque e limitado.</p>
+            <div id="gardenOffers" class="garden-market-grid"></div>
+            <h5>Inventario de Itens</h5>
+            <div id="gardenInventory" class="garden-upgrades-list"></div>
+          </div>
+
+          <div class="card garden-card garden-decor-shop-card">
+            <div class="garden-row-head">
+              <div>
+                <h4>Loja de Decoração</h4>
+                <p class="pass-muted">Compre, equipe e troque o visual do jardim como se fosse um sistema de itens.</p>
+              </div>
+              <div class="garden-decor-shop-actions">
+                <p class="shop-balance-header">Saldo: <span id="gardenDecorBalance" class="shop-balance-value">✨ 0</span></p>
+                <button type="button" id="gardenDecorInventoryToggleBtn" class="btn-ghost">Abrir inventário</button>
+              </div>
+            </div>
+
+            <div class="garden-decor-shop-layout">
+              <div class="garden-decor-market-panel">
+                <div class="garden-row-head garden-subhead">
+                  <h5>Catálogo da loja</h5>
+                  <small class="pass-muted">Itens comprados ficam no seu inventário para equipar depois.</small>
+                </div>
+                <input id="gardenDecorSearch" class="garden-decor-search" type="search" placeholder="Pesquisar decoração..." />
+                <div id="gardenDecorCatalog" class="garden-decor-grid"></div>
+              </div>
+
+              <aside id="gardenDecorInventoryPanel" class="garden-decor-inventory-panel is-collapsed">
+                <div class="garden-row-head garden-subhead">
+                  <h5>Inventário de decoração</h5>
+                </div>
+                <div id="gardenDecorInventory" class="garden-decor-inventory"></div>
+              </aside>
+            </div>
+
+            <p id="gardenDecorMessage" class="message"></p>
+          </div>
+        </section>
+
         <section id="tab-pass" class="tab-panel">
           <div class="card panel-head">
             <h3>Passe Diario</h3>
@@ -461,6 +550,7 @@
         <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
         <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
         <button class="nav-btn" data-tab="shop" title="Loja">🛍️<span>Loja</span></button>
+        <button class="nav-btn" data-tab="garden" title="Jardim">🌱<span>Jardim</span></button>
         <button class="nav-btn" data-tab="pass" title="Passe">🎫<span>Passe</span></button>
       </nav>
     </div>

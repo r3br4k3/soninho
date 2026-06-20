@@ -78,6 +78,21 @@ const state = {
   adminUnlocked: false,
   adminUsers: [],
   adminShopItems: [],
+  garden: {
+    player: null,
+    plants: [],
+    crops: [],
+    offers: [],
+    inventory: [],
+    decor: { catalog: [], inventory: [], equippedItems: [], equipped: null },
+    offerCycle: null,
+    layoutBySlot: {},
+    decorLayoutById: {},
+    editMode: false,
+    dragging: false,
+    decorInventoryOpen: false,
+    decorSearch: '',
+  },
 };
 
 const authView = document.getElementById('authView');
@@ -179,6 +194,27 @@ const passClaimProfileBtn = document.getElementById('passClaimProfileBtn');
 const passClaimProfileMessage = document.getElementById('passClaimProfileMessage');
 const passProfileRewardsList = document.getElementById('passProfileRewardsList');
 const passProfileEquipMessage = document.getElementById('passProfileEquipMessage');
+const gardenBalance = document.getElementById('gardenBalance');
+const gardenLevel = document.getElementById('gardenLevel');
+const gardenXp = document.getElementById('gardenXp');
+const gardenBuySlotBtn = document.getElementById('gardenBuySlotBtn');
+const gardenSlotInfo = document.getElementById('gardenSlotInfo');
+const gardenSlots = document.getElementById('gardenSlots');
+const gardenMessage = document.getElementById('gardenMessage');
+const gardenSeeds = document.getElementById('gardenSeeds');
+const gardenOffers = document.getElementById('gardenOffers');
+const gardenOfferTimer = document.getElementById('gardenOfferTimer');
+const gardenInventory = document.getElementById('gardenInventory');
+const gardenVisual = document.getElementById('gardenVisual');
+const gardenEditModeBtn = document.getElementById('gardenEditModeBtn');
+const gardenEditHint = document.getElementById('gardenEditHint');
+const gardenDecorBalance = document.getElementById('gardenDecorBalance');
+const gardenDecorSearch = document.getElementById('gardenDecorSearch');
+const gardenDecorCatalog = document.getElementById('gardenDecorCatalog');
+const gardenDecorInventory = document.getElementById('gardenDecorInventory');
+const gardenDecorInventoryPanel = document.getElementById('gardenDecorInventoryPanel');
+const gardenDecorInventoryToggleBtn = document.getElementById('gardenDecorInventoryToggleBtn');
+const gardenDecorMessage = document.getElementById('gardenDecorMessage');
 
 const DEFAULT_PROFILE_AVATAR = '/avatar-boneco-sem-rosto.svg';
 
@@ -677,6 +713,8 @@ function switchAuthTab(mode) {
 function setLoggedIn(user, token) {
   state.user = user;
   state.token = token;
+  loadGardenLayoutFromStorage();
+  loadGardenDecorLayoutFromStorage();
   localStorage.setItem('soninhos_user', JSON.stringify(user));
   localStorage.setItem('soninhos_token', token);
 
@@ -694,6 +732,8 @@ function setLoggedIn(user, token) {
 function logout() {
   stopLocationTrackingLocally();
   stopFriendLocationPolling();
+  stopGardenRefresh();
+  stopGardenCountdown();
   state.locationSharingEnabled = false;
 
   state.user = null;
@@ -721,6 +761,21 @@ function logout() {
     canClaimWeeklyProfileReward: false,
     currentWeeklyProfileReward: null,
     ownedProfileRewards: [],
+  };
+  state.garden = {
+    player: null,
+    plants: [],
+    crops: [],
+    offers: [],
+    inventory: [],
+    decor: { catalog: [], inventory: [], equippedItems: [], equipped: null },
+    offerCycle: null,
+    layoutBySlot: {},
+    decorLayoutById: {},
+    editMode: false,
+    dragging: false,
+    decorInventoryOpen: false,
+    decorSearch: '',
   };
   applyWallpaper(null);
   applyProfileBadge(null);
@@ -1332,8 +1387,11 @@ function activateTab(tabName) {
   document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach((btn) => btn.classList.remove('active'));
 
-  document.getElementById(`tab-${tabName}`).classList.add('active');
-  document.querySelector(`.nav-btn[data-tab="${tabName}"]`).classList.add('active');
+  const targetPanel = document.getElementById(`tab-${tabName}`) || document.getElementById('tab-garden');
+  const targetButton = document.querySelector(`.nav-btn[data-tab="${tabName}"]`) || document.querySelector('.nav-btn[data-tab="garden"]');
+
+  if (targetPanel) targetPanel.classList.add('active');
+  if (targetButton) targetButton.classList.add('active');
 }
 
 function formatShortDate(dateValue) {
@@ -1506,6 +1564,1064 @@ function renderPass() {
   renderPassProfileRewards();
 }
 
+let gardenCountdownInterval = null;
+let gardenRefreshInterval = null;
+
+function stopGardenCountdown() {
+  if (gardenCountdownInterval) {
+    clearInterval(gardenCountdownInterval);
+    gardenCountdownInterval = null;
+  }
+}
+
+function stopGardenRefresh() {
+  if (gardenRefreshInterval) {
+    clearInterval(gardenRefreshInterval);
+    gardenRefreshInterval = null;
+  }
+}
+
+function startGardenRefresh() {
+  stopGardenRefresh();
+  gardenRefreshInterval = setInterval(() => {
+    const gardenPanel = document.getElementById('tab-garden');
+    if (gardenPanel?.classList.contains('active')) {
+      loadGardenData();
+    }
+  }, 15000);
+}
+
+function startGardenRealtimeCountdown() {
+  stopGardenCountdown();
+  gardenCountdownInterval = setInterval(() => {
+    updateGardenRealtimeUI();
+  }, 1000);
+}
+
+function formatDurationMs(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function getGardenCropAtSlot(slotIndex) {
+  return state.garden.crops.find((crop) => Number(crop.slotIndex) === Number(slotIndex)) || null;
+}
+
+function getDefaultGardenSlotPositions() {
+  return {
+    1: { x: 12, y: 62 },
+    2: { x: 30, y: 57 },
+    3: { x: 48, y: 62 },
+    4: { x: 66, y: 56 },
+    5: { x: 84, y: 61 },
+    6: { x: 22, y: 77 },
+    7: { x: 50, y: 80 },
+    8: { x: 78, y: 77 },
+  };
+}
+
+function clampGardenPercent(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeGardenPosition(pos, fallback) {
+  return {
+    x: clampGardenPercent(Number(pos?.x), 6, 94) || fallback.x,
+    y: clampGardenPercent(Number(pos?.y), 44, 90) || fallback.y,
+  };
+}
+
+function getGardenLayoutStorageKey() {
+  const userPart = state.user?.id ? `u${state.user.id}` : 'guest';
+  return `soninhos_garden_layout_${userPart}`;
+}
+
+function loadGardenLayoutFromStorage() {
+  const defaults = getDefaultGardenSlotPositions();
+  const parsed = {};
+  try {
+    const raw = localStorage.getItem(getGardenLayoutStorageKey());
+    const payload = raw ? JSON.parse(raw) : {};
+    for (let slot = 1; slot <= 8; slot += 1) {
+      const key = String(slot);
+      parsed[key] = normalizeGardenPosition(payload?.[key], defaults[slot]);
+    }
+  } catch {
+    for (let slot = 1; slot <= 8; slot += 1) {
+      parsed[String(slot)] = { ...defaults[slot] };
+    }
+  }
+  state.garden.layoutBySlot = parsed;
+}
+
+function saveGardenLayoutToStorage() {
+  try {
+    localStorage.setItem(getGardenLayoutStorageKey(), JSON.stringify(state.garden.layoutBySlot || {}));
+  } catch {
+    // armazenamento indisponivel
+  }
+}
+
+function getGardenSlotPosition(slot) {
+  const defaults = getDefaultGardenSlotPositions();
+  const fallback = defaults[slot] || { x: 50, y: 70 };
+  const key = String(slot);
+  if (!state.garden.layoutBySlot?.[key]) {
+    if (!state.garden.layoutBySlot) state.garden.layoutBySlot = {};
+    state.garden.layoutBySlot[key] = { ...fallback };
+  }
+  return normalizeGardenPosition(state.garden.layoutBySlot[key], fallback);
+}
+
+function getDefaultGardenDecorPosition(decorId = '', index = 0) {
+  const key = String(decorId || 'decor');
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = ((hash << 5) - hash) + key.charCodeAt(i);
+    hash |= 0;
+  }
+  const x = 14 + (Math.abs(hash + (index * 17)) % 72);
+  const y = 12 + (Math.abs(hash + (index * 11)) % 30);
+  return { x, y };
+}
+
+function normalizeGardenDecorPosition(pos, fallback = getDefaultGardenDecorPosition()) {
+  return {
+    x: clampGardenPercent(Number(pos?.x), 4, 96) || fallback.x,
+    y: clampGardenPercent(Number(pos?.y), 6, 92) || fallback.y,
+  };
+}
+
+function getGardenDecorLayoutStorageKey() {
+  const userPart = state.user?.id ? `u${state.user.id}` : 'guest';
+  return `soninhos_garden_decor_layout_${userPart}`;
+}
+
+function loadGardenDecorLayoutFromStorage() {
+  try {
+    const raw = localStorage.getItem(getGardenDecorLayoutStorageKey());
+    const payload = raw ? JSON.parse(raw) : {};
+    state.garden.decorLayoutById = (payload && typeof payload === 'object') ? payload : {};
+  } catch {
+    state.garden.decorLayoutById = {};
+  }
+}
+
+function saveGardenDecorLayoutToStorage() {
+  try {
+    localStorage.setItem(getGardenDecorLayoutStorageKey(), JSON.stringify(state.garden.decorLayoutById || {}));
+  } catch {
+    // armazenamento indisponivel
+  }
+}
+
+function getGardenEquippedDecors() {
+  const equipped = state.garden.decor?.equippedItems;
+  if (Array.isArray(equipped) && equipped.length) return equipped;
+  return (state.garden.decor?.inventory || [])
+    .filter((item) => item.equipped)
+    .map((item) => ({
+      decorId: item.decorId,
+      name: item.name,
+      description: item.description,
+      assetPath: item.assetPath,
+      sceneMode: item.sceneMode || 'backdrop',
+    }));
+}
+
+function getGardenDecorPosition(decorId, index = 0) {
+  if (!state.garden.decorLayoutById) {
+    state.garden.decorLayoutById = {};
+  }
+  const key = String(decorId || 'decor');
+  const fallback = getDefaultGardenDecorPosition(key, index);
+  if (!state.garden.decorLayoutById[key]) {
+    state.garden.decorLayoutById[key] = { ...fallback };
+  }
+  const entry = state.garden.decorLayoutById[key];
+  const normalized = normalizeGardenDecorPosition(entry, fallback);
+  state.garden.decorLayoutById[key] = { ...normalized, scale: Number(entry?.scale) || 1 };
+  return state.garden.decorLayoutById[key];
+}
+
+function getGardenDecorScale(decorId) {
+  const entry = state.garden.decorLayoutById?.[String(decorId)];
+  return Math.max(0.3, Math.min(4, Number(entry?.scale) || 1));
+}
+
+function adjustGardenDecorScale(decorId, delta) {
+  if (!state.garden.decorLayoutById) state.garden.decorLayoutById = {};
+  const key = String(decorId);
+  const current = getGardenDecorScale(key);
+  const next = Math.max(0.3, Math.min(4, Math.round((current + delta) * 10) / 10));
+  state.garden.decorLayoutById[key] = {
+    ...(state.garden.decorLayoutById[key] || {}),
+    scale: next,
+  };
+  saveGardenDecorLayoutToStorage();
+  renderGardenVisual();
+}
+
+function getGardenDecorObjects() {
+  return getGardenEquippedDecors().filter((item) => String(item.sceneMode || '').toLowerCase() === 'object');
+}
+
+function getGardenBackdropDecor() {
+  return getGardenEquippedDecors().find((item) => String(item.sceneMode || '').toLowerCase() === 'backdrop') || null;
+}
+
+function updateGardenEditUI() {
+  if (!gardenEditModeBtn || !gardenEditHint) return;
+  const active = Boolean(state.garden.editMode);
+  gardenEditModeBtn.classList.toggle('active', active);
+  gardenEditModeBtn.textContent = active ? '⚙️ Finalizar' : '⚙️ Editar';
+  gardenEditHint.textContent = active
+    ? 'Modo edicao ativo: arraste as plantas e decoracoes para reposicionar.'
+    : 'Crescimento visual por tipo de flor';
+}
+
+function toggleGardenEditMode() {
+  state.garden.editMode = !state.garden.editMode;
+  state.garden.dragging = false;
+  updateGardenEditUI();
+  renderGardenVisual();
+}
+
+function bindGardenPlantDrag(plantEl, sceneEl, markerEl, slot) {
+  if (!plantEl || !sceneEl || !markerEl) return;
+  if (!state.garden.editMode) return;
+
+  plantEl.addEventListener('pointerdown', (event) => {
+    if (!state.garden.editMode) return;
+    event.preventDefault();
+    const pointerId = event.pointerId;
+    state.garden.dragging = true;
+    plantEl.classList.add('dragging');
+    plantEl.setPointerCapture(pointerId);
+
+    const move = (moveEvent) => {
+      const rect = sceneEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const nextX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      const nextY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      const safeX = clampGardenPercent(nextX, 6, 94);
+      const safeY = clampGardenPercent(nextY, 44, 90);
+      const key = String(slot);
+      state.garden.layoutBySlot[key] = { x: safeX, y: safeY };
+      plantEl.style.setProperty('--x', `${safeX}%`);
+      plantEl.style.setProperty('--y', `${safeY}%`);
+      markerEl.style.setProperty('--x', `${safeX}%`);
+      markerEl.style.setProperty('--y', `${safeY}%`);
+    };
+
+    const finish = () => {
+      plantEl.classList.remove('dragging');
+      state.garden.dragging = false;
+      saveGardenLayoutToStorage();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  });
+}
+
+function bindGardenDecorDrag(wrapperEl, sceneEl, decorId) {
+  if (!wrapperEl || !sceneEl) return;
+  if (!state.garden.editMode) return;
+
+  const dragHandle = wrapperEl.querySelector('.garden-scene-decor-object') || wrapperEl;
+
+  dragHandle.addEventListener('pointerdown', (event) => {
+    if (!state.garden.editMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.garden.dragging = true;
+    wrapperEl.classList.add('dragging');
+
+    const move = (moveEvent) => {
+      const rect = sceneEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const nextX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      const nextY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      const safeX = clampGardenPercent(nextX, 4, 96);
+      const safeY = clampGardenPercent(nextY, 6, 92);
+      if (!state.garden.decorLayoutById) state.garden.decorLayoutById = {};
+      const prevEntry = state.garden.decorLayoutById[String(decorId)] || {};
+      state.garden.decorLayoutById[String(decorId)] = { ...prevEntry, x: safeX, y: safeY };
+      wrapperEl.style.setProperty('--x', `${safeX}%`);
+      wrapperEl.style.setProperty('--y', `${safeY}%`);
+    };
+
+    const finish = () => {
+      wrapperEl.classList.remove('dragging');
+      state.garden.dragging = false;
+      saveGardenDecorLayoutToStorage();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  });
+}
+
+function applyGardenDecorToScene(sceneEl) {
+  if (!sceneEl) return;
+  const backdrop = getGardenBackdropDecor();
+  const assetPath = backdrop?.assetPath || '';
+  const hasBackdrop = Boolean(assetPath);
+  sceneEl.classList.toggle('decor-backdrop', hasBackdrop);
+  if (hasBackdrop) {
+    sceneEl.style.backgroundImage = `url('${assetPath}')`;
+    sceneEl.style.backgroundSize = 'cover';
+    sceneEl.style.backgroundPosition = 'center';
+  } else {
+    sceneEl.style.backgroundImage = '';
+    sceneEl.style.backgroundSize = '';
+    sceneEl.style.backgroundPosition = '';
+  }
+}
+
+function updateGardenDecorInventoryUI() {
+  if (!gardenDecorInventoryPanel || !gardenDecorInventoryToggleBtn) return;
+  const open = Boolean(state.garden.decorInventoryOpen);
+  gardenDecorInventoryPanel.classList.toggle('is-collapsed', !open);
+  gardenDecorInventoryToggleBtn.textContent = open ? 'Fechar inventário' : 'Abrir inventário';
+}
+
+function renderGardenDecorTab() {
+  if (gardenDecorCatalog) {
+    gardenDecorCatalog.innerHTML = '';
+    const searchTerm = String(state.garden.decorSearch || '').trim().toLowerCase();
+    const items = (state.garden.decor?.catalog || []).filter((item) => {
+      if (!searchTerm) return true;
+      const haystack = [item.name, item.description, item.rarity]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(searchTerm);
+    });
+
+    if (!items.length) {
+      gardenDecorCatalog.innerHTML = searchTerm
+        ? '<p class="pass-muted">Nenhuma decoracao encontrada na busca.</p>'
+        : '<p class="pass-muted">Nenhuma decoracao disponivel.</p>';
+    } else {
+      items.forEach((item) => {
+        const owned = Number(item.ownedQuantity || 0) > 0;
+        const equipped = Boolean(item.equipped);
+        const card = document.createElement('article');
+        card.className = 'garden-decor-card';
+        card.style.borderColor = item.rarityColor || '#9ea3ad';
+        card.innerHTML = `
+          <img class="garden-decor-preview" src="${item.assetPath}" alt="${escapeHtml(item.name)}" />
+          <div class="garden-decor-info">
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.description)}</small>
+            <small>Preco: ✨ ${Number(item.price || 0)}</small>
+            <small>Raridade: ${escapeHtml(item.rarity || 'comum')}</small>
+            <small>${owned ? `No inventario: x${item.ownedQuantity}` : 'Ainda nao comprado'}</small>
+          </div>
+        `;
+
+        const actions = document.createElement('div');
+        actions.className = 'shop-item-actions';
+
+        if (!owned) {
+          const buyBtn = document.createElement('button');
+          buyBtn.type = 'button';
+          buyBtn.className = 'btn-primary';
+          buyBtn.textContent = 'Comprar';
+          buyBtn.addEventListener('click', async () => {
+            await buyGardenDecor(item.id);
+          });
+          actions.appendChild(buyBtn);
+        } else if (equipped) {
+          const equippedBtn = document.createElement('button');
+          equippedBtn.type = 'button';
+          equippedBtn.className = 'garden-decor-equipped-tag';
+          equippedBtn.textContent = 'Equipado';
+          equippedBtn.title = 'Clique para desequipar';
+          equippedBtn.addEventListener('click', async () => {
+            await unequipGardenDecor(item.id);
+          });
+          actions.appendChild(equippedBtn);
+        } else {
+          const equipBtn = document.createElement('button');
+          equipBtn.type = 'button';
+          equipBtn.className = 'btn-primary';
+          equipBtn.textContent = 'Desequipado';
+          equipBtn.title = 'Clique para equipar';
+          equipBtn.addEventListener('click', async () => {
+            await equipGardenDecor(item.id);
+          });
+          actions.appendChild(equipBtn);
+        }
+
+        card.appendChild(actions);
+        gardenDecorCatalog.appendChild(card);
+      });
+    }
+  }
+
+  if (gardenDecorInventory) {
+    gardenDecorInventory.innerHTML = '';
+    const ownedItems = state.garden.decor?.inventory || [];
+
+    if (!ownedItems.length) {
+      gardenDecorInventory.innerHTML = '<p class="pass-muted">Seu inventario de decoracao esta vazio.</p>';
+    } else {
+      ownedItems.forEach((item) => {
+        const pill = document.createElement('article');
+        pill.className = `garden-decor-inventory-item${item.equipped ? ' equipped' : ''}`;
+        pill.style.borderColor = item.rarityColor || '#9ea3ad';
+        pill.innerHTML = `
+          <div class="garden-decor-item-visual">
+            ${item.assetPath ? `<img class="garden-decor-item-thumb" src="${item.assetPath}" alt="${escapeHtml(item.name)}" />` : '<span class="garden-decor-item-emoji">🪴</span>'}
+          </div>
+          <div class="garden-decor-item-info">
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>Quantidade: x${Number(item.quantity || 0)}</small>
+            <small>${item.equipped ? 'Equipado no cenário' : 'Guardado no inventário'}</small>
+          </div>
+          <div class="garden-decor-item-meta">
+            <span class="garden-decor-rarity">${escapeHtml(item.rarity || 'comum')}</span>
+            <span class="garden-decor-qty">x${Number(item.quantity || 0)}</span>
+          </div>
+        `;
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = item.equipped ? 'garden-decor-toggle-btn active' : 'garden-decor-toggle-btn';
+        toggleBtn.textContent = item.equipped ? 'Equipado' : 'Desequipado';
+        toggleBtn.title = item.equipped ? 'Clique para desequipar' : 'Clique para equipar';
+        toggleBtn.addEventListener('click', async () => {
+          if (item.equipped) {
+            await unequipGardenDecor(item.decorId);
+          } else {
+            await equipGardenDecor(item.decorId);
+          }
+        });
+        pill.appendChild(toggleBtn);
+        gardenDecorInventory.appendChild(pill);
+      });
+    }
+  }
+
+  updateGardenDecorInventoryUI();
+}
+
+function getGardenCropStage(crop) {
+  const readyAt = Date.parse(crop?.readyAt || '');
+  const plantedAt = Date.parse(crop?.plantedAt || '');
+  if (!Number.isFinite(readyAt) || !Number.isFinite(plantedAt) || readyAt <= plantedAt) {
+    return 1;
+  }
+  const total = readyAt - plantedAt;
+  const elapsed = Math.max(0, Math.min(total, Date.now() - plantedAt));
+  const progress = elapsed / total;
+  if (progress >= 1) return 4;
+  if (progress >= 0.72) return 3;
+  if (progress >= 0.4) return 2;
+  if (progress >= 0.12) return 1;
+  return 0;
+}
+
+function getGardenSpriteSheetForPlant(crop) {
+  const plantId = String(crop?.plantId || '').toLowerCase();
+  const sheets = {
+    margarida_lunar: '/garden-sprites/margarida_lunar.svg',
+    lavanda_nevoa: '/garden-sprites/lavanda_nevoa.svg',
+    rosa_onirica: '/garden-sprites/rosa_onirica.svg',
+    orquidea_estelar: '/garden-sprites/orquidea_estelar.svg',
+    lirio_cromatico: '/garden-sprites/lirio_cromatico.svg',
+  };
+  return sheets[plantId] || '/garden-sprites/margarida_lunar.svg';
+}
+
+function renderGardenVisual() {
+  if (!gardenVisual || !state.garden.player) return;
+
+  const maxSlots = Number(state.garden.player.maxSlots || 2);
+  updateGardenEditUI();
+
+  const plantedCount = state.garden.crops.length;
+  const totalUnlocked = Math.max(0, maxSlots);
+  const emptyUnlocked = Math.max(0, totalUnlocked - plantedCount);
+
+  gardenVisual.innerHTML = '';
+
+  const scene = document.createElement('div');
+  scene.className = `garden-scene${state.garden.editMode ? ' edit-mode' : ''}`;
+  scene.innerHTML = '<div class="garden-scene-sky" aria-hidden="true"></div><div class="garden-scene-ground" aria-hidden="true"></div>';
+  applyGardenDecorToScene(scene);
+
+  const decorObjects = getGardenDecorObjects();
+  decorObjects.forEach((decor, index) => {
+    const decorPos = getGardenDecorPosition(decor.decorId, index);
+    const scale = getGardenDecorScale(decor.decorId);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'garden-scene-decor-wrapper';
+    wrapper.style.setProperty('--x', `${decorPos.x}%`);
+    wrapper.style.setProperty('--y', `${decorPos.y}%`);
+    wrapper.style.setProperty('--scale', String(scale));
+    wrapper.dataset.decorId = String(decor.decorId || '');
+
+    const decorEl = document.createElement('button');
+    decorEl.type = 'button';
+    decorEl.className = 'garden-scene-decor-object';
+    decorEl.title = state.garden.editMode
+      ? `Arraste para posicionar ${decor?.name || 'o item decorativo'}.`
+      : (decor?.name || 'Decoracao ativa');
+    decorEl.innerHTML = `<img src="${escapeHtml(decor?.assetPath || '')}" alt="${escapeHtml(decor?.name || 'Decoracao')}" />`;
+    wrapper.appendChild(decorEl);
+    bindGardenDecorDrag(wrapper, scene, decor.decorId);
+
+    if (state.garden.editMode) {
+      const controls = document.createElement('div');
+      controls.className = 'garden-decor-resize-controls';
+
+      const minusBtn = document.createElement('button');
+      minusBtn.type = 'button';
+      minusBtn.className = 'garden-decor-resize-btn';
+      minusBtn.textContent = '−';
+      minusBtn.title = 'Diminuir item';
+      minusBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        adjustGardenDecorScale(decor.decorId, -0.1);
+      });
+
+      const scaleLabel = document.createElement('span');
+      scaleLabel.className = 'garden-decor-scale-label';
+      scaleLabel.textContent = `${Math.round(scale * 100)}%`;
+
+      const plusBtn = document.createElement('button');
+      plusBtn.type = 'button';
+      plusBtn.className = 'garden-decor-resize-btn';
+      plusBtn.textContent = '+';
+      plusBtn.title = 'Aumentar item';
+      plusBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        adjustGardenDecorScale(decor.decorId, 0.1);
+      });
+
+      controls.appendChild(minusBtn);
+      controls.appendChild(scaleLabel);
+      controls.appendChild(plusBtn);
+      wrapper.appendChild(controls);
+    }
+
+    scene.appendChild(wrapper);
+  });
+
+  const markerBySlot = new Map();
+
+  for (let slot = 1; slot <= 8; slot += 1) {
+    const unlocked = slot <= maxSlots;
+    const pos = getGardenSlotPosition(slot);
+    const marker = document.createElement('span');
+    marker.className = `garden-scene-slot${unlocked ? ' unlocked' : ' locked'}`;
+    marker.style.setProperty('--x', `${pos.x}%`);
+    marker.style.setProperty('--y', `${pos.y}%`);
+    marker.title = unlocked ? `Espaco ${slot} desbloqueado` : `Espaco ${slot} bloqueado`;
+    marker.dataset.slot = String(slot);
+    markerBySlot.set(slot, marker);
+    scene.appendChild(marker);
+
+    if (!unlocked) continue;
+    const crop = getGardenCropAtSlot(slot);
+    if (!crop) continue;
+
+    const stage = getGardenCropStage(crop);
+    const spriteSheet = getGardenSpriteSheetForPlant(crop);
+    const readyAt = Date.parse(crop.readyAt || '');
+    const isReady = Number.isFinite(readyAt) && Date.now() >= readyAt;
+
+    const plant = document.createElement('div');
+    plant.className = `garden-scene-plant${isReady ? ' ready' : ''}`;
+    plant.style.setProperty('--x', `${pos.x}%`);
+    plant.style.setProperty('--y', `${pos.y}%`);
+    plant.dataset.slot = String(slot);
+    plant.title = isReady
+      ? `${crop.plantName || 'Flor'} pronta para colher`
+      : `${crop.plantName || 'Flor'} crescendo`;
+    plant.innerHTML = `
+      <div
+        class="garden-sprite-sheet"
+        style="--stage:${stage};background-image:url('${escapeHtml(spriteSheet)}');"
+        aria-hidden="true"
+      ></div>
+    `;
+    scene.appendChild(plant);
+
+    const markerEl = markerBySlot.get(slot);
+    bindGardenPlantDrag(plant, scene, markerEl, slot);
+  }
+
+  const caption = document.createElement('p');
+  caption.className = 'garden-scene-caption';
+  caption.textContent = state.garden.editMode
+    ? `Modo edicao: arraste as plantas para onde quiser e clique em Finalizar.`
+    : `Jardim unico: ${plantedCount} plantada(s), ${emptyUnlocked} espaco(s) livre(s).`;
+
+  gardenVisual.appendChild(scene);
+  gardenVisual.appendChild(caption);
+}
+
+function formatGardenTypeLabel(type) {
+  if (type === 'speed') return 'Velocidade';
+  if (type === 'yield') return 'Colheita';
+  if (type === 'xp') return 'XP';
+  if (type === 'luck') return 'Sorte';
+  return 'Item';
+}
+
+function renderGardenInventory() {
+  if (!gardenInventory) return;
+  gardenInventory.innerHTML = '';
+
+  if (!state.garden.inventory.length) {
+    gardenInventory.innerHTML = '<span class="garden-upgrade-pill">Inventario vazio</span>';
+    return;
+  }
+
+  state.garden.inventory.forEach((item) => {
+    const pill = document.createElement('span');
+    pill.className = 'garden-upgrade-pill';
+    pill.style.borderColor = item.rarityColor || '#9ea3ad';
+    const pct = Math.round((item.effectValue || 0) * 100);
+    pill.textContent = `${item.icon || '🧰'} ${item.name} x${item.quantity} • ${formatGardenTypeLabel(item.type)} +${pct}%`;
+    gardenInventory.appendChild(pill);
+  });
+}
+
+function buildGardenItemSelect() {
+  const select = document.createElement('select');
+  select.innerHTML = '<option value="">Sem item (plantio puro)</option>';
+  state.garden.inventory.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.templateId;
+    const pct = Math.round((item.effectValue || 0) * 100);
+    option.textContent = `${item.icon || '🧰'} ${item.name} x${item.quantity} (+${pct}% ${formatGardenTypeLabel(item.type)})`;
+    select.appendChild(option);
+  });
+  return select;
+}
+
+function renderGardenSlots() {
+  if (!gardenSlots || !gardenSlotInfo || !state.garden.player) return;
+  const maxSlots = Number(state.garden.player.maxSlots || 2);
+  const nextSlotPrice = Number(state.garden.player.nextSlotPrice || 0);
+
+  gardenSlotInfo.textContent = `Espacos desbloqueados: ${maxSlots}. Proximo desbloqueio: ✨ ${nextSlotPrice}.`;
+  if (gardenBuySlotBtn) {
+    gardenBuySlotBtn.disabled = maxSlots >= 8;
+    gardenBuySlotBtn.textContent = maxSlots >= 8 ? 'Limite de espacos atingido' : `Desbloquear espaco (✨ ${nextSlotPrice})`;
+  }
+
+  gardenSlots.innerHTML = '';
+  for (let slot = 1; slot <= 8; slot += 1) {
+    const crop = getGardenCropAtSlot(slot);
+    const unlocked = slot <= maxSlots;
+    const card = document.createElement('article');
+    card.className = `garden-slot${unlocked ? '' : ' locked'}`;
+
+    if (!unlocked) {
+      card.innerHTML = `<h5>Espaco ${slot}</h5><small>Bloqueado</small>`;
+      gardenSlots.appendChild(card);
+      continue;
+    }
+
+    if (!crop) {
+      const select = document.createElement('select');
+      const availablePlants = state.garden.plants.filter((plant) => plant.unlocked && plant.seedQuantity > 0);
+      if (!availablePlants.length) {
+        select.innerHTML = '<option value="">Sem sementes disponiveis</option>';
+        select.disabled = true;
+      } else {
+        select.innerHTML = '<option value="">Escolha a semente</option>';
+        availablePlants.forEach((plant) => {
+          const option = document.createElement('option');
+          option.value = plant.id;
+          option.textContent = `${plant.name} (x${plant.seedQuantity})`;
+          select.appendChild(option);
+        });
+      }
+
+      const plantBtn = document.createElement('button');
+      plantBtn.type = 'button';
+      plantBtn.className = 'btn-primary';
+      plantBtn.textContent = 'Plantar';
+      plantBtn.disabled = select.disabled;
+      const itemSelect = buildGardenItemSelect();
+      plantBtn.addEventListener('click', async () => {
+        const plantId = select.value;
+        if (!plantId) {
+          showMessage(gardenMessage, 'Escolha uma semente para plantar.', true);
+          return;
+        }
+        await plantGardenSeed(slot, plantId, itemSelect.value || null);
+      });
+
+      const title = document.createElement('h5');
+      title.textContent = `Espaco ${slot}`;
+      const subtitle = document.createElement('small');
+      subtitle.textContent = 'Livre para plantar';
+      card.appendChild(title);
+      card.appendChild(subtitle);
+      card.appendChild(select);
+      card.appendChild(itemSelect);
+      card.appendChild(plantBtn);
+      gardenSlots.appendChild(card);
+      continue;
+    }
+
+    const readyAt = Date.parse(crop.readyAt);
+    const isReady = Number.isFinite(readyAt) && Date.now() >= readyAt;
+    const remaining = isReady ? 0 : Math.max(0, readyAt - Date.now());
+    const expectedReward = Math.max(1, Math.round((crop.baseReward || 1) * (crop.yieldMultiplier || 1)));
+
+    const harvestBtn = document.createElement('button');
+    harvestBtn.type = 'button';
+    harvestBtn.className = isReady ? 'btn-primary' : 'btn-ghost';
+    harvestBtn.textContent = isReady ? 'Colher agora' : 'Ainda crescendo';
+    harvestBtn.disabled = !isReady;
+    harvestBtn.addEventListener('click', async () => {
+      await harvestGardenSlot(slot);
+    });
+
+    const info = document.createElement('div');
+    const statusLine = document.createElement('small');
+    statusLine.className = 'garden-crop-timer';
+    statusLine.dataset.readyAt = String(crop.readyAt || '');
+    statusLine.dataset.slot = String(slot);
+    statusLine.textContent = isReady ? 'Pronto para colher!' : `Tempo restante: ${formatDurationMs(remaining)}`;
+
+    const rewardLine = document.createElement('small');
+    rewardLine.textContent = `Colheita prevista: ✨ ${expectedReward}`;
+
+    const title = document.createElement('h5');
+    title.innerHTML = `<span class="garden-plant-icon" style="background:${escapeHtml(crop.plantRarityColor || '#9ea3ad')};">${escapeHtml(crop.plantIcon || '🌱')}</span> Espaco ${slot} • ${escapeHtml(crop.plantName)}`;
+
+    info.appendChild(title);
+    info.appendChild(statusLine);
+    info.appendChild(document.createElement('br'));
+    info.appendChild(rewardLine);
+    if (crop.appliedItem?.name) {
+      const appliedLine = document.createElement('small');
+      appliedLine.textContent = `Item aplicado: ${crop.appliedItem.icon || '🧰'} ${crop.appliedItem.name}`;
+      info.appendChild(document.createElement('br'));
+      info.appendChild(appliedLine);
+    }
+
+    card.appendChild(info);
+    harvestBtn.classList.add('garden-harvest-btn');
+    harvestBtn.dataset.readyAt = String(crop.readyAt || '');
+    card.appendChild(harvestBtn);
+    gardenSlots.appendChild(card);
+  }
+}
+
+function renderGardenSeeds() {
+  if (!gardenSeeds || !state.garden.player) return;
+  gardenSeeds.innerHTML = '';
+  const level = Number(state.garden.player.level || 1);
+
+  state.garden.plants.forEach((plant) => {
+    const card = document.createElement('article');
+    card.className = 'garden-item';
+    card.style.borderColor = plant.rarityColor || '#9ea3ad';
+    const unlocked = Boolean(plant.unlocked);
+    const lockedText = unlocked ? '' : `Nivel ${plant.unlockLevel}`;
+
+    card.innerHTML = `
+      <strong><span class="garden-seed-icon">${escapeHtml(plant.icon || '🌱')}</span> ${escapeHtml(plant.name)}</strong>
+      <small>Raridade: ${escapeHtml(plant.rarity)} • Cresce em ${plant.growMinutes} min</small>
+      <small>Semente: ✨ ${plant.seedCost} • Colheita base: ✨ ${plant.harvestReward}</small>
+      <small>XP de colheita: +${plant.xpReward} • Inventario: x${plant.seedQuantity}</small>
+      <small>${unlocked ? 'Desbloqueada' : `Bloqueada (${lockedText})`}</small>
+    `;
+
+    const buyBtn = document.createElement('button');
+    buyBtn.type = 'button';
+    buyBtn.className = 'btn-primary';
+    buyBtn.textContent = `Comprar 1 (✨ ${plant.seedCost})`;
+    buyBtn.disabled = !unlocked || level < plant.unlockLevel;
+    buyBtn.addEventListener('click', async () => {
+      await buyGardenSeed(plant.id, 1);
+    });
+
+    card.appendChild(buyBtn);
+    gardenSeeds.appendChild(card);
+  });
+}
+
+function renderGardenOffers() {
+  if (!gardenOffers) return;
+  gardenOffers.innerHTML = '';
+
+  if (!state.garden.offers.length) {
+    gardenOffers.innerHTML = '<p class="pass-muted">Sem ofertas neste ciclo.</p>';
+    return;
+  }
+
+  state.garden.offers.forEach((offer) => {
+    const card = document.createElement('article');
+    card.className = 'garden-item';
+    card.style.borderColor = offer.rarityColor || '#8e77cc';
+
+    if (offer.empty) {
+      card.innerHTML = `
+        <span class="garden-offer-tier">Slot vazio</span>
+        <strong>🌫️ Sem item</strong>
+        <small>${escapeHtml(offer.description || 'Volte no proximo ciclo.')}</small>
+      `;
+      gardenOffers.appendChild(card);
+      return;
+    }
+
+    const effectPct = Math.round((offer.effectValue || 0) * 100);
+
+    card.innerHTML = `
+      <span class="garden-offer-tier">Tier ${offer.tier}</span>
+      <strong>${escapeHtml(offer.icon || '🧰')} ${escapeHtml(offer.name)}</strong>
+      <small>${escapeHtml(offer.description)}</small>
+      <small>Efeito: +${effectPct}% • Estoque: ${offer.stock}</small>
+      <small>Preco: ✨ ${offer.price}</small>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'shop-item-actions';
+
+    const buyOneBtn = document.createElement('button');
+    buyOneBtn.type = 'button';
+    buyOneBtn.className = 'btn-primary';
+    buyOneBtn.textContent = 'Comprar 1';
+    buyOneBtn.disabled = offer.stock <= 0;
+    buyOneBtn.addEventListener('click', async () => {
+      await buyGardenUpgrade(offer.offerId, 1);
+    });
+
+    const buyAllBtn = document.createElement('button');
+    buyAllBtn.type = 'button';
+    buyAllBtn.className = 'btn-ghost';
+    buyAllBtn.textContent = `Comprar estoque (${offer.stock})`;
+    buyAllBtn.disabled = offer.stock <= 0;
+    buyAllBtn.addEventListener('click', async () => {
+      await buyGardenUpgrade(offer.offerId, offer.stock);
+    });
+
+    actions.appendChild(buyOneBtn);
+    actions.appendChild(buyAllBtn);
+    card.appendChild(actions);
+    gardenOffers.appendChild(card);
+  });
+}
+
+function updateGardenRealtimeUI() {
+  if (gardenOfferTimer && state.garden.offerCycle?.resetAt) {
+    const resetAt = Date.parse(state.garden.offerCycle.resetAt);
+    if (Number.isFinite(resetAt)) {
+      const offerRemaining = Math.max(0, resetAt - Date.now());
+      gardenOfferTimer.textContent = `Proxima rotacao em ${formatDurationMs(offerRemaining)}`;
+      if (offerRemaining <= 0) {
+        loadGardenData();
+      }
+    }
+  }
+
+  document.querySelectorAll('.garden-crop-timer').forEach((timerEl) => {
+    const readyAt = Date.parse(timerEl.dataset.readyAt || '');
+    const button = timerEl.closest('.garden-slot')?.querySelector('.garden-harvest-btn');
+    if (!Number.isFinite(readyAt) || !button) return;
+    const remaining = Math.max(0, readyAt - Date.now());
+    const ready = remaining <= 0;
+    timerEl.textContent = ready ? 'Pronto para colher!' : `Tempo restante: ${formatDurationMs(remaining)}`;
+    button.disabled = !ready;
+    button.className = ready ? 'btn-primary garden-harvest-btn' : 'btn-ghost garden-harvest-btn';
+    button.textContent = ready ? 'Colher agora' : 'Ainda crescendo';
+  });
+
+  if (!state.garden.dragging) {
+    renderGardenVisual();
+  }
+}
+
+function renderGarden() {
+  if (!state.garden.player) return;
+  if (gardenBalance) gardenBalance.textContent = `✨ ${state.garden.player.soninhosBalance || 0}`;
+  if (gardenLevel) gardenLevel.textContent = String(state.garden.player.level || 1);
+  if (gardenXp) gardenXp.textContent = `${state.garden.player.xpInLevel || 0} / ${state.garden.player.xpToNext || 0}`;
+
+  renderGardenSlots();
+  renderGardenVisual();
+  renderGardenSeeds();
+  renderGardenOffers();
+  renderGardenInventory();
+  renderGardenDecorTab();
+  updateGardenRealtimeUI();
+  startGardenRealtimeCountdown();
+}
+
+function applyGardenSnapshot(data) {
+  state.garden.player = data.player || null;
+  state.garden.plants = data.plants || [];
+  state.garden.crops = data.crops || [];
+  state.garden.offers = data.offers || [];
+  state.garden.inventory = data.inventory || [];
+  state.garden.decor = data.decor || { catalog: [], inventory: [], equippedItems: [], equipped: null };
+  state.garden.offerCycle = data.offerCycle || null;
+  if (state.garden.player) {
+    state.soninhos = state.garden.player.soninhosBalance ?? state.soninhos;
+    updateSoninhosDisplay();
+  }
+}
+
+async function loadGardenData(showSilent = true) {
+  try {
+    const data = await api('/api/garden/status');
+    applyGardenSnapshot(data);
+    renderGarden();
+  } catch (err) {
+    if (!showSilent) {
+      showMessage(gardenMessage, err.message, true);
+    }
+  }
+}
+
+async function loadGardenDecorData(showSilent = true) {
+  try {
+    const data = await api('/api/garden/decor/status');
+    state.garden.decor = data || { catalog: [], inventory: [], equippedItems: [], equipped: null };
+    renderGardenDecorTab();
+    renderGardenVisual();
+  } catch (err) {
+    if (!showSilent && gardenDecorMessage) {
+      showMessage(gardenDecorMessage, err.message, true);
+    }
+  }
+}
+
+async function buyGardenSeed(plantId, quantity = 1) {
+  try {
+    const data = await api('/api/garden/seeds/buy', {
+      method: 'POST',
+      body: JSON.stringify({ plantId, quantity }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenMessage, data.message || 'Semente comprada.');
+  } catch (err) {
+    showMessage(gardenMessage, err.message, true);
+  }
+}
+
+async function plantGardenSeed(slotIndex, plantId, itemTemplateId = null) {
+  try {
+    const data = await api('/api/garden/plant', {
+      method: 'POST',
+      body: JSON.stringify({ slotIndex, plantId, itemTemplateId }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenMessage, data.message || 'Plantio realizado.');
+  } catch (err) {
+    showMessage(gardenMessage, err.message, true);
+  }
+}
+
+async function harvestGardenSlot(slotIndex) {
+  try {
+    const data = await api('/api/garden/harvest', {
+      method: 'POST',
+      body: JSON.stringify({ slotIndex }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenMessage, data.message || 'Colheita realizada.');
+  } catch (err) {
+    showMessage(gardenMessage, err.message, true);
+  }
+}
+
+async function buyGardenSlot() {
+  try {
+    const data = await api('/api/garden/slots/buy', { method: 'POST' });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenMessage, data.message || 'Espaco desbloqueado.');
+  } catch (err) {
+    showMessage(gardenMessage, err.message, true);
+  }
+}
+
+async function buyGardenUpgrade(offerId, quantity = 1) {
+  try {
+    const data = await api('/api/garden/upgrades/buy', {
+      method: 'POST',
+      body: JSON.stringify({ offerId, quantity }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenMessage, data.message || 'Upgrade comprado.');
+  } catch (err) {
+    showMessage(gardenMessage, err.message, true);
+  }
+}
+
+async function buyGardenDecor(decorId) {
+  try {
+    const data = await api('/api/garden/decor/buy', {
+      method: 'POST',
+      body: JSON.stringify({ decorId }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenDecorMessage, data.message || 'Decoracao comprada.');
+  } catch (err) {
+    showMessage(gardenDecorMessage, err.message, true);
+  }
+}
+
+async function equipGardenDecor(decorId) {
+  try {
+    const data = await api('/api/garden/decor/equip', {
+      method: 'POST',
+      body: JSON.stringify({ decorId }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenDecorMessage, data.message || 'Decoracao equipada.');
+  } catch (err) {
+    showMessage(gardenDecorMessage, err.message, true);
+  }
+}
+
+async function unequipGardenDecor(decorId = null) {
+  try {
+    const data = await api('/api/garden/decor/unequip', {
+      method: 'POST',
+      body: JSON.stringify({ decorId }),
+    });
+    applyGardenSnapshot(data);
+    renderGarden();
+    showMessage(gardenDecorMessage, data.message || 'Decoracao removida.');
+  } catch (err) {
+    showMessage(gardenDecorMessage, err.message, true);
+  }
+}
+
 // ─── LOJA DOS SONHOS ─────────────────────────────────────────────────────────
 
 function updateSoninhosDisplay() {
@@ -1513,6 +2629,8 @@ function updateSoninhosDisplay() {
   if (soninhosBalance) soninhosBalance.textContent = txt;
   if (shopBalanceDisplay) shopBalanceDisplay.textContent = `✨ ${state.soninhos}`;
   if (passSoninhosDisplay) passSoninhosDisplay.textContent = `✨ ${state.soninhos}`;
+  if (gardenBalance) gardenBalance.textContent = `✨ ${state.soninhos}`;
+  if (gardenDecorBalance) gardenDecorBalance.textContent = `✨ ${state.soninhos}`;
 }
 
 function clampColorChannel(value) {
@@ -2216,6 +3334,8 @@ async function bootstrapAppData() {
     await loadStats();
     await loadShopData();
     await loadPassData();
+    await loadGardenData();
+    await loadGardenDecorData();
   } catch (err) {
     showMessage(dreamMessage, err.message, true);
   }
@@ -2428,6 +3548,16 @@ function attachEvents() {
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'shop') await loadShopData();
       if (tab === 'pass') await loadPassData();
+      if (tab === 'garden') {
+        await Promise.all([
+          loadGardenData(false),
+          loadGardenDecorData(false),
+        ]);
+        startGardenRefresh();
+      } else {
+        stopGardenRefresh();
+        stopGardenCountdown();
+      }
       if (tab === 'friends') {
         await loadFriendsData();
         if (friendLocationSelect.value) {
@@ -2562,6 +3692,32 @@ function attachEvents() {
   if (adminTogglePurchaseBtn) {
     adminTogglePurchaseBtn.addEventListener('click', async () => {
       await toggleSelectedUserPurchase();
+    });
+  }
+
+  if (gardenBuySlotBtn) {
+    gardenBuySlotBtn.addEventListener('click', async () => {
+      await buyGardenSlot();
+    });
+  }
+
+  if (gardenEditModeBtn) {
+    gardenEditModeBtn.addEventListener('click', () => {
+      toggleGardenEditMode();
+    });
+  }
+
+  if (gardenDecorSearch) {
+    gardenDecorSearch.addEventListener('input', () => {
+      state.garden.decorSearch = gardenDecorSearch.value || '';
+      renderGardenDecorTab();
+    });
+  }
+
+  if (gardenDecorInventoryToggleBtn) {
+    gardenDecorInventoryToggleBtn.addEventListener('click', () => {
+      state.garden.decorInventoryOpen = !state.garden.decorInventoryOpen;
+      updateGardenDecorInventoryUI();
     });
   }
 }

@@ -21,6 +21,9 @@ const ADMIN_KEY = String(process.env.ADMIN_KEY || "william").toLowerCase();
 const TAG_CUSTOM_ITEM_ID = "tag_custom_personalizada";
 const ALLOWED_TAG_FONT_CLASSES = new Set(["font-dancing", "font-orbitron", "font-playfair", "font-courier"]);
 const ALLOWED_TAG_ANIMATION_CLASSES = new Set(["tag-anim-blink", "tag-anim-pulse", "tag-anim-float"]);
+const GARDEN_OFFER_WINDOW_MS = 5 * 60 * 1000;
+const GARDEN_MAX_SLOTS = 8;
+const GARDEN_BASE_SLOTS = 2;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -91,6 +94,369 @@ function isWeekendDate(dateObj = new Date()) {
 
 function getDailyPassReward(dateObj = new Date()) {
   return isWeekendDate(dateObj) ? WEEKEND_PASS_REWARD : DAILY_PASS_REWARD;
+}
+
+function getGardenOfferCycleInfo(nowMs = Date.now()) {
+  const cycleStart = Math.floor(nowMs / GARDEN_OFFER_WINDOW_MS) * GARDEN_OFFER_WINDOW_MS;
+  const cycleEnd = cycleStart + GARDEN_OFFER_WINDOW_MS;
+  return {
+    cycleKey: String(cycleStart),
+    cycleStart,
+    cycleEnd,
+  };
+}
+
+function gardenXpRequiredForLevel(level) {
+  return 24 + ((level - 1) * 18);
+}
+
+function computeGardenLevelInfo(totalXp) {
+  let level = 1;
+  let remainingXp = Math.max(0, Number(totalXp) || 0);
+  let required = gardenXpRequiredForLevel(level);
+
+  while (remainingXp >= required) {
+    remainingXp -= required;
+    level += 1;
+    required = gardenXpRequiredForLevel(level);
+  }
+
+  return {
+    level,
+    xpInLevel: remainingXp,
+    xpToNext: required,
+  };
+}
+
+function seededRandom(seedValue) {
+  let seed = Number(seedValue) || 1;
+  return () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+}
+
+async function ensureGardenPlayer(db, userId) {
+  await db.run(
+    "INSERT OR IGNORE INTO garden_player (user_id, total_xp, max_slots) VALUES (?, 0, ?)",
+    [userId, GARDEN_BASE_SLOTS]
+  );
+}
+
+async function updateGardenXp(db, userId, xpEarned) {
+  const safeXp = Math.max(0, Math.floor(Number(xpEarned) || 0));
+  await ensureGardenPlayer(db, userId);
+  await db.run(
+    "UPDATE garden_player SET total_xp = total_xp + ? WHERE user_id = ?",
+    [safeXp, userId]
+  );
+
+  const player = await db.get("SELECT total_xp, max_slots FROM garden_player WHERE user_id = ?", [userId]);
+  const info = computeGardenLevelInfo(player?.total_xp || 0);
+  return {
+    totalXp: player?.total_xp || 0,
+    maxSlots: player?.max_slots || GARDEN_BASE_SLOTS,
+    ...info,
+  };
+}
+
+function slotUpgradePrice(maxSlots) {
+  const current = Math.max(GARDEN_BASE_SLOTS, Number(maxSlots) || GARDEN_BASE_SLOTS);
+  const bought = current - GARDEN_BASE_SLOTS;
+  return 40 + (bought * 38);
+}
+
+async function ensureGardenOffersForCycle(db, userId, cycleKey, level) {
+  const existing = await db.all(
+    `SELECT go.offer_id, go.template_id, go.stock, go.price,
+            gut.name, gut.description, gut.upgrade_type, gut.tier, gut.effect_value, gut.uses_per_purchase,
+            gut.rarity, gut.rarity_color, gut.icon, gut.stackable
+     FROM garden_upgrade_offers go
+     JOIN garden_upgrade_templates gut ON gut.id = go.template_id
+     WHERE go.user_id = ? AND go.cycle_key = ?
+     ORDER BY go.offer_id ASC`,
+    [userId, cycleKey]
+  );
+  if (existing.length) {
+    const mapById = new Map(existing.map((item) => [Number(item.offer_id), item]));
+    return Array.from({ length: 4 }, (_, idx) => {
+      const offerId = idx + 1;
+      const item = mapById.get(offerId);
+      if (!item) {
+        return {
+          offerId,
+          empty: true,
+          name: 'Sem oferta nesta rotacao',
+          description: 'A banca mistica ficou vazia neste ciclo.',
+        };
+      }
+
+      return {
+        offerId,
+        templateId: item.template_id,
+        name: item.name,
+        description: item.description,
+        type: item.upgrade_type,
+        tier: Number(item.tier) || 1,
+        effectValue: Number(item.effect_value) || 0,
+        usesPerPurchase: Number(item.uses_per_purchase) || 1,
+        stock: Number(item.stock) || 0,
+        price: Number(item.price) || 0,
+        rarity: item.rarity || 'comum',
+        rarityColor: item.rarity_color || '#9ea3ad',
+        icon: item.icon || '🧰',
+        stackable: Boolean(item.stackable),
+      };
+    });
+  }
+
+  const templates = await db.all(
+    `SELECT id, name, description, upgrade_type, tier, price, min_level, effect_value, uses_per_purchase, weight, base_stock, max_stock,
+            rarity, rarity_color, icon, stackable
+     FROM garden_upgrade_templates
+     WHERE min_level <= ?
+     ORDER BY tier ASC, id ASC`,
+    [level]
+  );
+  if (!templates.length) return [];
+
+  const rng = seededRandom(Number(cycleKey) + (userId * 101));
+  const usedTemplateIds = new Set();
+  const offersToInsert = [];
+  const offeredBySlot = new Map();
+
+  for (let offerId = 1; offerId <= 4; offerId += 1) {
+    if (rng() < 0.32) {
+      continue;
+    }
+    const available = templates.filter((tpl) => !usedTemplateIds.has(tpl.id));
+    if (!available.length) break;
+
+    const weighted = available.flatMap((tpl) => Array.from({ length: Math.max(1, Number(tpl.weight) || 1) }, () => tpl));
+    const picked = weighted[Math.floor(rng() * weighted.length)] || available[0];
+    usedTemplateIds.add(picked.id);
+
+    const minStock = Math.max(1, Number(picked.base_stock) || 1);
+    const maxStock = Math.max(minStock, Number(picked.max_stock) || minStock);
+    const stock = minStock + Math.floor(rng() * (maxStock - minStock + 1));
+    const randomFactor = 0.9 + (rng() * 0.25);
+    const price = Math.max(1, Math.round((Number(picked.price) || 1) * randomFactor));
+
+    offersToInsert.push({ offerId, picked, stock, price });
+    offeredBySlot.set(offerId, { offerId, picked, stock, price });
+  }
+
+  for (const offer of offersToInsert) {
+    await db.run(
+      `INSERT OR REPLACE INTO garden_upgrade_offers
+       (cycle_key, user_id, offer_id, template_id, stock, price)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cycleKey, userId, offer.offerId, offer.picked.id, offer.stock, offer.price]
+    );
+  }
+
+  return Array.from({ length: 4 }, (_, idx) => {
+    const offerId = idx + 1;
+    const entry = offeredBySlot.get(offerId);
+    if (!entry) {
+      return {
+        offerId,
+        empty: true,
+        name: 'Sem oferta nesta rotacao',
+        description: 'A banca mistica ficou vazia neste ciclo.',
+      };
+    }
+
+    return {
+      offerId,
+      templateId: entry.picked.id,
+      name: entry.picked.name,
+      description: entry.picked.description,
+      type: entry.picked.upgrade_type,
+      tier: Number(entry.picked.tier) || 1,
+      effectValue: Number(entry.picked.effect_value) || 0,
+      usesPerPurchase: Number(entry.picked.uses_per_purchase) || 1,
+      stock: entry.stock,
+      price: entry.price,
+      rarity: entry.picked.rarity || 'comum',
+      rarityColor: entry.picked.rarity_color || '#9ea3ad',
+      icon: entry.picked.icon || '🧰',
+      stackable: Boolean(entry.picked.stackable),
+    };
+  });
+}
+
+async function getGardenSnapshot(db, userId) {
+  await ensureGardenPlayer(db, userId);
+
+  const player = await db.get("SELECT total_xp, max_slots FROM garden_player WHERE user_id = ?", [userId]);
+  const levelInfo = computeGardenLevelInfo(player?.total_xp || 0);
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [userId]);
+
+  const plants = await db.all(
+    `SELECT id, name, seed_cost, grow_minutes, harvest_reward, xp_reward, unlock_level, rarity, rarity_color, icon
+     FROM garden_plants
+     ORDER BY unlock_level ASC, seed_cost ASC`
+  );
+  const seeds = await db.all(
+    "SELECT plant_id, quantity FROM garden_seed_inventory WHERE user_id = ?",
+    [userId]
+  );
+  const seedMap = new Map(seeds.map((seed) => [seed.plant_id, Number(seed.quantity) || 0]));
+
+  const crops = await db.all(
+    `SELECT gc.id, gc.slot_index, gc.plant_id, gc.planted_at, gc.ready_at, gc.growth_multiplier, gc.yield_multiplier,
+            gc.xp_multiplier, gc.luck_bonus, gc.applied_item_template_id,
+            gp.name, gp.harvest_reward, gp.xp_reward, gp.icon AS plant_icon, gp.rarity_color AS plant_rarity_color,
+            gut.name AS item_name, gut.icon AS item_icon, gut.rarity_color AS item_rarity_color
+     FROM garden_crops gc
+     JOIN garden_plants gp ON gp.id = gc.plant_id
+     LEFT JOIN garden_upgrade_templates gut ON gut.id = gc.applied_item_template_id
+     WHERE gc.user_id = ? AND gc.harvested_at IS NULL
+     ORDER BY gc.slot_index ASC`,
+    [userId]
+  );
+
+  const inventory = await db.all(
+    `SELECT gi.template_id, gi.quantity,
+            gut.name, gut.description, gut.upgrade_type, gut.effect_value, gut.rarity, gut.rarity_color, gut.icon
+     FROM garden_item_inventory gi
+     JOIN garden_upgrade_templates gut ON gut.id = gi.template_id
+     WHERE gi.user_id = ? AND gi.quantity > 0
+     ORDER BY gut.tier DESC, gut.price DESC`,
+    [userId]
+  );
+
+  const decorCatalog = await db.all(
+    `SELECT id, name, description, price, rarity, rarity_color, asset_path, scene_mode
+     FROM garden_decor_items
+     ORDER BY price ASC, name ASC`
+  );
+  const decorInventory = await db.all(
+    `SELECT gdi.decor_id, gdi.quantity, gdi.equipped, gdi.acquired_at,
+            gdii.name, gdii.description, gdii.price, gdii.rarity, gdii.rarity_color, gdii.asset_path, gdii.scene_mode
+     FROM garden_decor_inventory gdi
+     JOIN garden_decor_items gdii ON gdii.id = gdi.decor_id
+     WHERE gdi.user_id = ?
+     ORDER BY gdi.equipped DESC, gdi.acquired_at DESC`,
+    [userId]
+  );
+  const equippedDecorItems = decorInventory.filter((item) => Number(item.equipped) === 1);
+  const equippedDecor = equippedDecorItems[0] || null;
+
+  const nowMs = Date.now();
+  const cycle = getGardenOfferCycleInfo(nowMs);
+  const offers = await ensureGardenOffersForCycle(db, userId, cycle.cycleKey, levelInfo.level);
+
+  return {
+    player: {
+      level: levelInfo.level,
+      totalXp: player?.total_xp || 0,
+      xpInLevel: levelInfo.xpInLevel,
+      xpToNext: levelInfo.xpToNext,
+      maxSlots: player?.max_slots || GARDEN_BASE_SLOTS,
+      nextSlotPrice: slotUpgradePrice(player?.max_slots || GARDEN_BASE_SLOTS),
+      soninhosBalance: user?.soninhos_balance || 0,
+    },
+    plants: plants.map((plant) => ({
+      id: plant.id,
+      name: plant.name,
+      seedCost: Number(plant.seed_cost) || 0,
+      growMinutes: Number(plant.grow_minutes) || 0,
+      harvestReward: Number(plant.harvest_reward) || 0,
+      xpReward: Number(plant.xp_reward) || 0,
+      unlockLevel: Number(plant.unlock_level) || 1,
+      rarity: plant.rarity,
+      rarityColor: plant.rarity_color || '#9ea3ad',
+      icon: plant.icon || '🌱',
+      seedQuantity: seedMap.get(plant.id) || 0,
+      unlocked: levelInfo.level >= (Number(plant.unlock_level) || 1),
+    })),
+    crops: crops.map((crop) => ({
+      id: crop.id,
+      slotIndex: Number(crop.slot_index),
+      plantId: crop.plant_id,
+      plantName: crop.name,
+      plantedAt: crop.planted_at,
+      readyAt: crop.ready_at,
+      isReady: Date.parse(crop.ready_at) <= nowMs,
+      growthMultiplier: Number(crop.growth_multiplier) || 1,
+      yieldMultiplier: Number(crop.yield_multiplier) || 1,
+      xpMultiplier: Number(crop.xp_multiplier) || 1,
+      luckBonus: Number(crop.luck_bonus) || 0,
+      baseReward: Number(crop.harvest_reward) || 0,
+      baseXp: Number(crop.xp_reward) || 0,
+      plantIcon: crop.plant_icon || '🌱',
+      plantRarityColor: crop.plant_rarity_color || '#9ea3ad',
+      appliedItem: crop.applied_item_template_id
+        ? {
+            id: crop.applied_item_template_id,
+            name: crop.item_name || 'Item',
+            icon: crop.item_icon || '🧰',
+            rarityColor: crop.item_rarity_color || '#9ea3ad',
+          }
+        : null,
+    })),
+    offers,
+    inventory: inventory.map((item) => ({
+      templateId: item.template_id,
+      name: item.name,
+      description: item.description,
+      type: item.upgrade_type,
+      effectValue: Number(item.effect_value) || 0,
+      quantity: Number(item.quantity) || 0,
+      rarity: item.rarity || 'comum',
+      rarityColor: item.rarity_color || '#9ea3ad',
+      icon: item.icon || '🧰',
+    })),
+    decor: {
+      catalog: decorCatalog.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: Number(item.price) || 0,
+        rarity: item.rarity || 'comum',
+        rarityColor: item.rarity_color || '#9ea3ad',
+        assetPath: item.asset_path,
+        sceneMode: item.scene_mode || 'backdrop',
+        ownedQuantity: decorInventory.find((owned) => owned.decor_id === item.id)?.quantity || 0,
+        equipped: Boolean(decorInventory.find((owned) => owned.decor_id === item.id)?.equipped),
+      })),
+      inventory: decorInventory.map((item) => ({
+        decorId: item.decor_id,
+        name: item.name,
+        description: item.description,
+        price: Number(item.price) || 0,
+        rarity: item.rarity || 'comum',
+        rarityColor: item.rarity_color || '#9ea3ad',
+        assetPath: item.asset_path,
+        sceneMode: item.scene_mode || 'backdrop',
+        quantity: Number(item.quantity) || 0,
+        equipped: Boolean(item.equipped),
+      })),
+      equippedItems: equippedDecorItems.map((item) => ({
+        decorId: item.decor_id,
+        name: item.name,
+        description: item.description,
+        assetPath: item.asset_path,
+        sceneMode: item.scene_mode || 'backdrop',
+      })),
+      equipped: equippedDecor
+        ? {
+            decorId: equippedDecor.decor_id,
+            name: equippedDecor.name,
+            description: equippedDecor.description,
+            assetPath: equippedDecor.asset_path,
+            sceneMode: equippedDecor.scene_mode || 'backdrop',
+          }
+        : null,
+    },
+    offerCycle: {
+      key: cycle.cycleKey,
+      resetAt: new Date(cycle.cycleEnd).toISOString(),
+      resetInMs: Math.max(0, cycle.cycleEnd - nowMs),
+    },
+  };
 }
 
 async function listPassItems() {
@@ -1618,6 +1984,404 @@ app.post("/api/soninhos/transfer", authMiddleware, async (req, res) => {
   return res.json({
     message: `Voce transferiu ✨ ${amount} soninhos para ${receiver.name}!`,
     newBalance: updated.soninhos_balance,
+  });
+});
+
+// ─── Jardim dos Sonhos ──────────────────────────────────────────────────────
+
+app.get("/api/garden/status", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json(snapshot);
+});
+
+app.post("/api/garden/seeds/buy", authMiddleware, async (req, res) => {
+  const plantId = String(req.body?.plantId || "").trim();
+  const quantity = Math.max(1, Math.floor(Number(req.body?.quantity) || 1));
+  if (!plantId) return res.status(400).json({ message: "Semente invalida" });
+  if (quantity > 20) return res.status(400).json({ message: "Limite de 20 sementes por compra" });
+
+  const db = await getDb();
+  await ensureGardenPlayer(db, req.user.id);
+  const player = await db.get("SELECT total_xp FROM garden_player WHERE user_id = ?", [req.user.id]);
+  const levelInfo = computeGardenLevelInfo(player?.total_xp || 0);
+
+  const plant = await db.get("SELECT * FROM garden_plants WHERE id = ?", [plantId]);
+  if (!plant) return res.status(404).json({ message: "Planta nao encontrada" });
+  if (levelInfo.level < Number(plant.unlock_level || 1)) {
+    return res.status(403).json({ message: "Nivel insuficiente para esta semente" });
+  }
+
+  const totalCost = Number(plant.seed_cost || 0) * quantity;
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = Number(user?.soninhos_balance || 0);
+  if (balance < totalCost) {
+    return res.status(400).json({ message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${totalCost}` });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [totalCost, req.user.id]);
+  await db.run(
+    `INSERT INTO garden_seed_inventory (user_id, plant_id, quantity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, plant_id)
+     DO UPDATE SET quantity = garden_seed_inventory.quantity + excluded.quantity`,
+    [req.user.id, plantId, quantity]
+  );
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    spent: totalCost,
+    message: `${quantity} semente(s) de ${plant.name} comprada(s).`,
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/plant", authMiddleware, async (req, res) => {
+  const slotIndex = Number(req.body?.slotIndex);
+  const plantId = String(req.body?.plantId || "").trim();
+  const itemTemplateId = String(req.body?.itemTemplateId || "").trim() || null;
+  if (!Number.isInteger(slotIndex) || slotIndex <= 0) {
+    return res.status(400).json({ message: "Slot invalido" });
+  }
+  if (!plantId) return res.status(400).json({ message: "Semente invalida" });
+
+  const db = await getDb();
+  await ensureGardenPlayer(db, req.user.id);
+  const player = await db.get("SELECT total_xp, max_slots FROM garden_player WHERE user_id = ?", [req.user.id]);
+  if (slotIndex > Number(player?.max_slots || GARDEN_BASE_SLOTS)) {
+    return res.status(400).json({ message: "Esse espaco de plantio ainda esta bloqueado" });
+  }
+
+  const levelInfo = computeGardenLevelInfo(player?.total_xp || 0);
+  const plant = await db.get("SELECT * FROM garden_plants WHERE id = ?", [plantId]);
+  if (!plant) return res.status(404).json({ message: "Planta nao encontrada" });
+  if (levelInfo.level < Number(plant.unlock_level || 1)) {
+    return res.status(403).json({ message: "Nivel insuficiente para plantar esta semente" });
+  }
+
+  const inventory = await db.get(
+    "SELECT quantity FROM garden_seed_inventory WHERE user_id = ? AND plant_id = ?",
+    [req.user.id, plantId]
+  );
+  if ((Number(inventory?.quantity) || 0) <= 0) {
+    return res.status(400).json({ message: "Voce nao possui sementes suficientes" });
+  }
+
+  const occupied = await db.get(
+    "SELECT id FROM garden_crops WHERE user_id = ? AND slot_index = ? AND harvested_at IS NULL",
+    [req.user.id, slotIndex]
+  );
+  if (occupied) return res.status(400).json({ message: "Esse espaco ja esta ocupado" });
+
+  let growthMultiplier = 1;
+  let yieldMultiplier = 1;
+  let xpMultiplier = 1;
+  let luckBonus = 0;
+  let appliedItem = null;
+
+  if (itemTemplateId) {
+    const inventoryItem = await db.get(
+      `SELECT gi.quantity, gut.id, gut.name, gut.icon, gut.upgrade_type, gut.effect_value
+       FROM garden_item_inventory gi
+       JOIN garden_upgrade_templates gut ON gut.id = gi.template_id
+       WHERE gi.user_id = ? AND gi.template_id = ? AND gi.quantity > 0`,
+      [req.user.id, itemTemplateId]
+    );
+    if (!inventoryItem) {
+      return res.status(400).json({ message: "Voce nao possui esse item no inventario" });
+    }
+
+    const effect = Math.max(0, Number(inventoryItem.effect_value) || 0);
+    if (inventoryItem.upgrade_type === "speed") {
+      growthMultiplier = Math.max(0.25, 1 - Math.min(0.75, effect));
+    } else if (inventoryItem.upgrade_type === "yield") {
+      yieldMultiplier = 1 + Math.min(2, effect);
+    } else if (inventoryItem.upgrade_type === "xp") {
+      xpMultiplier = 1 + Math.min(3, effect);
+    } else if (inventoryItem.upgrade_type === "luck") {
+      luckBonus = Math.min(0.8, effect);
+    }
+
+    const consume = await db.run(
+      "UPDATE garden_item_inventory SET quantity = quantity - 1 WHERE user_id = ? AND template_id = ? AND quantity > 0",
+      [req.user.id, itemTemplateId]
+    );
+    if (!consume?.changes) {
+      return res.status(400).json({ message: "Item indisponivel no inventario no momento do plantio" });
+    }
+    await db.run(
+      "DELETE FROM garden_item_inventory WHERE user_id = ? AND template_id = ? AND quantity <= 0",
+      [req.user.id, itemTemplateId]
+    );
+
+    appliedItem = {
+      id: inventoryItem.id,
+      name: inventoryItem.name,
+      icon: inventoryItem.icon || '🧰',
+    };
+  }
+
+  const now = new Date();
+  const growMs = Math.max(60 * 1000, Math.round(Number(plant.grow_minutes || 1) * 60 * 1000 * growthMultiplier));
+  const readyAt = new Date(now.getTime() + growMs);
+
+  await db.run(
+    `INSERT INTO garden_crops
+     (user_id, slot_index, plant_id, planted_at, ready_at, growth_multiplier, yield_multiplier, xp_multiplier, luck_bonus, applied_item_template_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.user.id, slotIndex, plantId, now.toISOString(), readyAt.toISOString(), growthMultiplier, yieldMultiplier, xpMultiplier, luckBonus, itemTemplateId]
+  );
+  await db.run(
+    `UPDATE garden_seed_inventory
+     SET quantity = quantity - 1
+     WHERE user_id = ? AND plant_id = ?`,
+    [req.user.id, plantId]
+  );
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    message: `${plant.name} plantada no espaco ${slotIndex}.`,
+    appliedItem,
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/harvest", authMiddleware, async (req, res) => {
+  const slotIndex = Number(req.body?.slotIndex);
+  if (!Number.isInteger(slotIndex) || slotIndex <= 0) {
+    return res.status(400).json({ message: "Slot invalido" });
+  }
+
+  const db = await getDb();
+  const crop = await db.get(
+    `SELECT gc.id, gc.user_id, gc.slot_index, gc.ready_at, gc.yield_multiplier, gc.xp_multiplier, gc.luck_bonus,
+            gc.applied_item_template_id, gut.name AS item_name, gut.icon AS item_icon,
+            gp.name, gp.harvest_reward, gp.xp_reward
+     FROM garden_crops gc
+     JOIN garden_plants gp ON gp.id = gc.plant_id
+     LEFT JOIN garden_upgrade_templates gut ON gut.id = gc.applied_item_template_id
+     WHERE gc.user_id = ? AND gc.slot_index = ? AND gc.harvested_at IS NULL`,
+    [req.user.id, slotIndex]
+  );
+  if (!crop) return res.status(404).json({ message: "Nao ha planta ativa nesse espaco" });
+
+  const nowMs = Date.now();
+  const readyAtMs = Date.parse(crop.ready_at);
+  if (!Number.isFinite(readyAtMs) || nowMs < readyAtMs) {
+    return res.status(400).json({ message: "A planta ainda nao esta pronta para colheita" });
+  }
+
+  let reward = Math.max(1, Math.round((Number(crop.harvest_reward) || 1) * (Number(crop.yield_multiplier) || 1)));
+  const xp = Math.max(1, Math.round((Number(crop.xp_reward) || 1) * (Number(crop.xp_multiplier) || 1)));
+  const luckyTriggerChance = Math.max(0, Math.min(0.8, Number(crop.luck_bonus) || 0));
+  const luckyHit = luckyTriggerChance > 0 && Math.random() < luckyTriggerChance;
+  if (luckyHit) {
+    reward = Math.max(1, Math.round(reward * 1.6));
+  }
+
+  await db.run("UPDATE garden_crops SET harvested_at = ? WHERE id = ?", [new Date(nowMs).toISOString(), crop.id]);
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance + ? WHERE id = ?", [reward, req.user.id]);
+  const player = await updateGardenXp(db, req.user.id, xp);
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    harvested: {
+      plantName: crop.name,
+      reward,
+      xp,
+      level: player.level,
+      luckyHit,
+      appliedItem: crop.applied_item_template_id
+        ? {
+            id: crop.applied_item_template_id,
+            name: crop.item_name || 'Item',
+            icon: crop.item_icon || '🧰',
+          }
+        : null,
+    },
+    message: luckyHit
+      ? `Colheita critica! +✨ ${reward} soninhos e +${xp} XP.`
+      : `Colheita concluida: +✨ ${reward} soninhos e +${xp} XP.`,
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/slots/buy", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  await ensureGardenPlayer(db, req.user.id);
+  const player = await db.get("SELECT max_slots FROM garden_player WHERE user_id = ?", [req.user.id]);
+  const currentSlots = Number(player?.max_slots || GARDEN_BASE_SLOTS);
+
+  if (currentSlots >= GARDEN_MAX_SLOTS) {
+    return res.status(400).json({ message: "Voce ja desbloqueou o limite maximo de espacos" });
+  }
+
+  const price = slotUpgradePrice(currentSlots);
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = Number(user?.soninhos_balance || 0);
+  if (balance < price) {
+    return res.status(400).json({ message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${price}` });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [price, req.user.id]);
+  await db.run("UPDATE garden_player SET max_slots = max_slots + 1 WHERE user_id = ?", [req.user.id]);
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    spent: price,
+    message: "Novo espaco de plantio desbloqueado!",
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/upgrades/buy", authMiddleware, async (req, res) => {
+  const offerId = Number(req.body?.offerId);
+  const quantity = Math.max(1, Math.floor(Number(req.body?.quantity) || 1));
+  if (!Number.isInteger(offerId) || offerId <= 0) {
+    return res.status(400).json({ message: "Oferta invalida" });
+  }
+  if (quantity > 99) {
+    return res.status(400).json({ message: "Quantidade invalida" });
+  }
+
+  const db = await getDb();
+  await ensureGardenPlayer(db, req.user.id);
+  const player = await db.get("SELECT total_xp FROM garden_player WHERE user_id = ?", [req.user.id]);
+  const levelInfo = computeGardenLevelInfo(player?.total_xp || 0);
+
+  const cycle = getGardenOfferCycleInfo(Date.now());
+  await ensureGardenOffersForCycle(db, req.user.id, cycle.cycleKey, levelInfo.level);
+
+  const offer = await db.get(
+    `SELECT go.offer_id, go.stock, go.price, gut.id AS template_id, gut.name, gut.upgrade_type, gut.effect_value, gut.uses_per_purchase
+     FROM garden_upgrade_offers go
+     JOIN garden_upgrade_templates gut ON gut.id = go.template_id
+     WHERE go.user_id = ? AND go.cycle_key = ? AND go.offer_id = ?`,
+    [req.user.id, cycle.cycleKey, offerId]
+  );
+  if (!offer) return res.status(404).json({ message: "Oferta nao encontrada neste ciclo" });
+  if ((Number(offer.stock) || 0) <= 0) {
+    return res.status(400).json({ message: "Oferta esgotada" });
+  }
+  if (quantity > Number(offer.stock || 0)) {
+    return res.status(400).json({ message: `Estoque insuficiente nesta oferta. Maximo disponivel: ${offer.stock}.` });
+  }
+
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = Number(user?.soninhos_balance || 0);
+  const unitPrice = Number(offer.price) || 0;
+  const price = unitPrice * quantity;
+  if (balance < price) {
+    return res.status(400).json({ message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${price}` });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [price, req.user.id]);
+  await db.run(
+    "UPDATE garden_upgrade_offers SET stock = stock - ? WHERE user_id = ? AND cycle_key = ? AND offer_id = ?",
+    [quantity, req.user.id, cycle.cycleKey, offerId]
+  );
+
+  const unitsPerBuy = Math.max(1, Number(offer.uses_per_purchase) || 1);
+  const totalUnits = unitsPerBuy * quantity;
+  await db.run(
+    `INSERT INTO garden_item_inventory (user_id, template_id, quantity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, template_id)
+     DO UPDATE SET quantity = garden_item_inventory.quantity + excluded.quantity`,
+    [req.user.id, offer.template_id, totalUnits]
+  );
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    spent: price,
+    quantityBought: quantity,
+    unitsAdded: totalUnits,
+    message: `${offer.name} comprado (${quantity}x) e enviado para o inventario do jardim.`,
+    ...snapshot,
+  });
+});
+
+app.get("/api/garden/decor/status", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json(snapshot.decor || { catalog: [], inventory: [], equippedItems: [], equipped: null });
+});
+
+app.post("/api/garden/decor/buy", authMiddleware, async (req, res) => {
+  const decorId = String(req.body?.decorId || "").trim();
+  if (!decorId) return res.status(400).json({ message: "Item de decoracao invalido" });
+
+  const db = await getDb();
+  const decor = await db.get("SELECT * FROM garden_decor_items WHERE id = ?", [decorId]);
+  if (!decor) return res.status(404).json({ message: "Decoracao nao encontrada" });
+
+  const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [req.user.id]);
+  const balance = Number(user?.soninhos_balance || 0);
+  const price = Number(decor.price || 0);
+  if (balance < price) {
+    return res.status(400).json({ message: `Soninhos insuficientes. Voce tem ${balance}, precisa de ${price}` });
+  }
+
+  await db.run("UPDATE users SET soninhos_balance = soninhos_balance - ? WHERE id = ?", [price, req.user.id]);
+  await db.run(
+    `INSERT INTO garden_decor_inventory (user_id, decor_id, quantity, equipped)
+     VALUES (?, ?, 1, 0)
+     ON CONFLICT(user_id, decor_id)
+     DO UPDATE SET quantity = garden_decor_inventory.quantity + 1`,
+    [req.user.id, decorId]
+  );
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    spent: price,
+    message: `${decor.name} comprado por ✨ ${price} soninhos.`,
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/decor/equip", authMiddleware, async (req, res) => {
+  const decorId = String(req.body?.decorId || "").trim();
+  if (!decorId) return res.status(400).json({ message: "Item de decoracao invalido" });
+
+  const db = await getDb();
+  const owned = await db.get(
+    "SELECT quantity FROM garden_decor_inventory WHERE user_id = ? AND decor_id = ? AND quantity > 0",
+    [req.user.id, decorId]
+  );
+  if (!owned) return res.status(400).json({ message: "Voce precisa comprar esse item antes de equipar" });
+
+  await db.run("UPDATE garden_decor_inventory SET equipped = 1 WHERE user_id = ? AND decor_id = ?", [req.user.id, decorId]);
+
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    message: "Decoracao equipada no jardim.",
+    ...snapshot,
+  });
+});
+
+app.post("/api/garden/decor/unequip", authMiddleware, async (req, res) => {
+  const decorId = String(req.body?.decorId || "").trim();
+  const db = await getDb();
+  if (decorId) {
+    await db.run(
+      "UPDATE garden_decor_inventory SET equipped = 0 WHERE user_id = ? AND decor_id = ?",
+      [req.user.id, decorId]
+    );
+  } else {
+    await db.run("UPDATE garden_decor_inventory SET equipped = 0 WHERE user_id = ?", [req.user.id]);
+  }
+  const snapshot = await getGardenSnapshot(db, req.user.id);
+  return res.json({
+    success: true,
+    message: decorId ? "Item de decoracao removido do jardim." : "Decoracao removida do jardim.",
+    ...snapshot,
   });
 });
 
