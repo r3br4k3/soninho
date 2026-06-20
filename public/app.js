@@ -270,6 +270,10 @@ function renderAdminSelectors() {
 
   const currentUserValue = adminUserSelect.value;
   adminUserSelect.innerHTML = '';
+  const userPlaceholder = document.createElement('option');
+  userPlaceholder.value = '';
+  userPlaceholder.textContent = 'Selecione uma conta';
+  adminUserSelect.appendChild(userPlaceholder);
   state.adminUsers.forEach((user) => {
     const option = document.createElement('option');
     option.value = String(user.id);
@@ -278,6 +282,8 @@ function renderAdminSelectors() {
   });
   if (currentUserValue && Array.from(adminUserSelect.options).some((o) => o.value === currentUserValue)) {
     adminUserSelect.value = currentUserValue;
+  } else {
+    adminUserSelect.value = '';
   }
 
   const currentItemValue = adminItemSelect.value;
@@ -3700,7 +3706,7 @@ function attachEvents() {
   if (adminResetPasswordBtn) {
     adminResetPasswordBtn.addEventListener('click', async () => {
       const user = getAdminSelectedUser();
-      if (!user) {
+      if (!adminUserSelect?.value || !user) {
         showMessage(adminStatus, 'Selecione uma conta.', true);
         return;
       }
@@ -3714,7 +3720,7 @@ function attachEvents() {
           method: 'POST',
           body: JSON.stringify({ newPassword }),
         });
-        showMessage(adminStatus, result.message || 'Senha alterada com sucesso.');
+        showMessage(adminStatus, result.message || 'Senha trocada com sucesso.');
         if (adminNewPassword) adminNewPassword.value = '';
       } catch (err) {
         showMessage(adminStatus, err.message, true);

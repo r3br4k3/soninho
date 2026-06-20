@@ -1935,7 +1935,7 @@ app.post("/api/admin/users/:userId/password", authMiddleware, requireAdmin, asyn
   const hash = await bcrypt.hash(newPassword, 10);
   await db.run("UPDATE users SET password_hash = ? WHERE id = ?", [hash, userId]);
 
-  return res.json({ success: true, message: `Senha de ${user.name} alterada com sucesso.` });
+  return res.json({ success: true, message: "Senha trocada com sucesso." });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
