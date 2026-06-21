@@ -159,10 +159,16 @@ const customWallpaperStatus = document.getElementById('customWallpaperStatus');
 const removeCustomWallpaperBtn = document.getElementById('removeCustomWallpaperBtn');
 const customWallpaperList = document.getElementById('customWallpaperList');
 const shopAdminPanel = document.getElementById('shopAdminPanel');
+const adminAccessCard = document.getElementById('adminAccessCard');
+const adminAccessForm = document.getElementById('adminAccessForm');
+const adminAccessPassword = document.getElementById('adminAccessPassword');
+const adminAccessStatus = document.getElementById('adminAccessStatus');
 const adminUserSelect = document.getElementById('adminUserSelect');
 const adminCoinsAmount = document.getElementById('adminCoinsAmount');
+const adminGardenLevel = document.getElementById('adminGardenLevel');
 const adminAddCoinsBtn = document.getElementById('adminAddCoinsBtn');
 const adminRemoveCoinsBtn = document.getElementById('adminRemoveCoinsBtn');
+const adminSetGardenLevelBtn = document.getElementById('adminSetGardenLevelBtn');
 const adminItemSelect = document.getElementById('adminItemSelect');
 const adminTogglePurchaseBtn = document.getElementById('adminTogglePurchaseBtn');
 const adminPurchaseState = document.getElementById('adminPurchaseState');
@@ -220,14 +226,15 @@ const gardenDecorMessage = document.getElementById('gardenDecorMessage');
 
 const DEFAULT_PROFILE_AVATAR = '/avatar-boneco-sem-rosto.svg';
 
-const ADMIN_TRIGGER_KEY = 'william';
+const ADMIN_API_KEY = 'william200';
+const ADMIN_PANEL_PASSWORD = 'william200';
 
 function adminApi(path, options = {}) {
   return api(path, {
     ...options,
     headers: {
       ...(options.headers || {}),
-      'x-admin-key': ADMIN_TRIGGER_KEY,
+      'x-admin-key': ADMIN_API_KEY,
     },
   });
 }
@@ -258,11 +265,17 @@ function renderAdminAccountsList() {
       <p>
         <strong>${escapeHtml(user.name)}</strong><br />
         <small>${escapeHtml(user.email)}</small><br />
-        <small>ID: ${user.id} | Saldo: ✨ ${user.soninhos_balance}</small>
+        <small>ID: ${user.id} | Saldo: ✨ ${user.soninhos_balance} | Jardim: Nv ${user.garden_level || 1}</small>
       </p>
     `;
     adminAccountsList.appendChild(row);
   });
+}
+
+function syncAdminGardenLevelInput() {
+  if (!adminGardenLevel) return;
+  const user = getAdminSelectedUser();
+  adminGardenLevel.value = String(user?.garden_level || 1);
 }
 
 function renderAdminSelectors() {
@@ -297,6 +310,8 @@ function renderAdminSelectors() {
   if (currentItemValue && Array.from(adminItemSelect.options).some((o) => o.value === currentItemValue)) {
     adminItemSelect.value = currentItemValue;
   }
+
+  syncAdminGardenLevelInput();
 }
 
 function updateAdminPurchaseState() {
@@ -329,9 +344,19 @@ async function loadAdminData() {
 async function unlockAdminPanel() {
   if (!shopAdminPanel) return;
   state.adminUnlocked = true;
+  if (adminAccessCard) adminAccessCard.classList.add('hidden');
   shopAdminPanel.classList.remove('hidden');
   await loadAdminData();
-  showMessage(customWallpaperStatus, 'Painel admin liberado.');
+  if (adminAccessPassword) adminAccessPassword.value = '';
+  showMessage(adminAccessStatus, 'Painel admin liberado.');
+}
+
+function lockAdminPanel() {
+  state.adminUnlocked = false;
+  if (shopAdminPanel) shopAdminPanel.classList.add('hidden');
+  if (adminAccessCard) adminAccessCard.classList.remove('hidden');
+  if (adminAccessPassword) adminAccessPassword.value = '';
+  if (adminAccessStatus) adminAccessStatus.textContent = '';
 }
 
 async function adjustSelectedUserBalance(signal) {
@@ -380,6 +405,32 @@ async function toggleSelectedUserPurchase() {
     showMessage(adminStatus, `Item ${item.name} marcado como ${statusText} para ${user.name}.`);
     await loadAdminData();
     await loadShopData();
+  } catch (err) {
+    showMessage(adminStatus, err.message, true);
+  }
+}
+
+async function setSelectedUserGardenLevel() {
+  const user = getAdminSelectedUser();
+  if (!user) {
+    showMessage(adminStatus, 'Selecione uma conta.', true);
+    return;
+  }
+
+  const level = Number(adminGardenLevel?.value || 0);
+  if (!Number.isInteger(level) || level < 1 || level > 100) {
+    showMessage(adminStatus, 'Informe um nivel entre 1 e 100.', true);
+    return;
+  }
+
+  try {
+    const result = await adminApi(`/api/admin/users/${encodeURIComponent(user.id)}/garden-level`, {
+      method: 'POST',
+      body: JSON.stringify({ level }),
+    });
+    showMessage(adminStatus, `Nivel do jardim de ${user.name} atualizado para ${result.garden.level}.`);
+    await loadAdminData();
+    await loadGardenData();
   } catch (err) {
     showMessage(adminStatus, err.message, true);
   }
@@ -743,6 +794,7 @@ function logout() {
   stopGardenRefresh();
   stopGardenCountdown();
   state.locationSharingEnabled = false;
+  lockAdminPanel();
 
   state.user = null;
   state.token = '';
@@ -2050,10 +2102,20 @@ function getGardenSpriteSheetForPlant(crop) {
   const plantId = String(crop?.plantId || '').toLowerCase();
   const sheets = {
     margarida_lunar: '/garden-sprites/margarida_lunar.svg',
+    camelia_serena: '/garden-sprites/camelia_serena.svg',
+    violeta_brisa: '/garden-sprites/violeta_brisa.svg',
     lavanda_nevoa: '/garden-sprites/lavanda_nevoa.svg',
+    girassol_dourado: '/garden-sprites/girassol_dourado.svg',
+    dalia_ambar: '/garden-sprites/dalia_ambar.svg',
     rosa_onirica: '/garden-sprites/rosa_onirica.svg',
+    tulipa_boreal: '/garden-sprites/tulipa_boreal.svg',
+    peonia_lucida: '/garden-sprites/peonia_lucida.svg',
     orquidea_estelar: '/garden-sprites/orquidea_estelar.svg',
+    anemona_veludo: '/garden-sprites/anemona_veludo.svg',
+    loto_espectral: '/garden-sprites/loto_espectral.svg',
     lirio_cromatico: '/garden-sprites/lirio_cromatico.svg',
+    flor_fenix: '/garden-sprites/flor_fenix.svg',
+    rosa_constelacao: '/garden-sprites/rosa_constelacao.svg',
   };
   return sheets[plantId] || '/garden-sprites/margarida_lunar.svg';
 }
@@ -3555,6 +3617,7 @@ function attachEvents() {
       if (tab === 'stats') await loadStats();
       if (tab === 'calendar') await renderCalendar();
       if (tab === 'shop') await loadShopData();
+      if (tab === 'admin' && state.adminUnlocked) await loadAdminData();
       if (tab === 'pass') await loadPassData();
       if (tab === 'garden') {
         await Promise.all([
@@ -3620,17 +3683,28 @@ function attachEvents() {
         return;
       }
 
-      if (urlValue.toLowerCase() === ADMIN_TRIGGER_KEY) {
-        customWallpaperUrl.value = '';
-        try {
-          await unlockAdminPanel();
-        } catch (err) {
-          showMessage(customWallpaperStatus, err.message, true);
-        }
+      await buyCustomWallpaper(urlValue);
+    });
+  }
+
+  if (adminAccessForm) {
+    adminAccessForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const passwordValue = String(adminAccessPassword?.value || '').trim();
+      if (!passwordValue) {
+        showMessage(adminAccessStatus, 'Digite a senha do admin.', true);
+        return;
+      }
+      if (passwordValue !== ADMIN_PANEL_PASSWORD) {
+        showMessage(adminAccessStatus, 'Senha admin incorreta.', true);
         return;
       }
 
-      await buyCustomWallpaper(urlValue);
+      try {
+        await unlockAdminPanel();
+      } catch (err) {
+        showMessage(adminAccessStatus, err.message, true);
+      }
     });
   }
 
@@ -3676,6 +3750,7 @@ function attachEvents() {
   if (adminUserSelect) {
     adminUserSelect.addEventListener('change', () => {
       updateAdminPurchaseState();
+      syncAdminGardenLevelInput();
     });
   }
 
@@ -3694,6 +3769,12 @@ function attachEvents() {
   if (adminRemoveCoinsBtn) {
     adminRemoveCoinsBtn.addEventListener('click', async () => {
       await adjustSelectedUserBalance(-1);
+    });
+  }
+
+  if (adminSetGardenLevelBtn) {
+    adminSetGardenLevelBtn.addEventListener('click', async () => {
+      await setSelectedUserGardenLevel();
     });
   }
 

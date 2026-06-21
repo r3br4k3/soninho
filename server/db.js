@@ -448,11 +448,21 @@ export async function getDb() {
   }
 
   const gardenPlants = [
-    ['margarida_lunar', 'Margarida Lunar', 8, 5, 12, 4, 1, 'comum', '#9ea3ad', '🌼'],
-    ['lavanda_nevoa', 'Lavanda da Nevoa', 18, 10, 28, 9, 2, 'incomum', '#5bc28f', '🪻'],
-    ['rosa_onirica', 'Rosa Onirica', 35, 16, 52, 16, 4, 'rara', '#4d9dfb', '🌹'],
-    ['orquidea_estelar', 'Orquidea Estelar', 72, 24, 106, 30, 6, 'epica', '#a567ff', '🌸'],
-    ['lirio_cromatico', 'Lirio Cromatico', 128, 36, 184, 52, 8, 'lendaria', '#ffb84d', '🌺'],
+    ['margarida_lunar', 'Margarida Lunar', 8, 5, 12, 3, 1, 'comum', '#9ea3ad', '🌼'],
+    ['camelia_serena', 'Camelia Serena', 12, 7, 18, 4, 3, 'comum', '#9ea3ad', '🌷'],
+    ['violeta_brisa', 'Violeta da Brisa', 16, 9, 24, 5, 6, 'comum', '#9ea3ad', '🪷'],
+    ['lavanda_nevoa', 'Lavanda da Nevoa', 22, 11, 32, 6, 10, 'incomum', '#5bc28f', '🪻'],
+    ['girassol_dourado', 'Girassol Dourado', 32, 13, 46, 8, 14, 'incomum', '#5bc28f', '🌻'],
+    ['dalia_ambar', 'Dalia de Ambar', 46, 16, 64, 10, 20, 'incomum', '#5bc28f', '🌼'],
+    ['rosa_onirica', 'Rosa Onirica', 66, 20, 92, 13, 28, 'rara', '#4d9dfb', '🌹'],
+    ['tulipa_boreal', 'Tulipa Boreal', 92, 24, 126, 17, 36, 'rara', '#4d9dfb', '🌷'],
+    ['peonia_lucida', 'Peonia Lucida', 126, 29, 170, 22, 45, 'rara', '#4d9dfb', '🌺'],
+    ['orquidea_estelar', 'Orquidea Estelar', 170, 34, 226, 29, 55, 'epica', '#a567ff', '🌸'],
+    ['anemona_veludo', 'Anemona de Veludo', 232, 40, 302, 37, 66, 'epica', '#a567ff', '🌸'],
+    ['loto_espectral', 'Loto Espectral', 306, 47, 390, 46, 74, 'epica', '#a567ff', '🪷'],
+    ['lirio_cromatico', 'Lirio Cromatico', 396, 55, 510, 58, 82, 'lendaria', '#ffb84d', '🌺'],
+    ['flor_fenix', 'Flor Fenix', 516, 64, 656, 73, 90, 'lendaria', '#ffb84d', '🔥'],
+    ['rosa_constelacao', 'Rosa da Constelacao', 690, 78, 860, 92, 100, 'mitica', '#ff6ad5', '💫'],
   ];
 
   for (const [id, name, seedCost, growMinutes, harvestReward, xpReward, unlockLevel, rarity, rarityColor, icon] of gardenPlants) {

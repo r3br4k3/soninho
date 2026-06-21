@@ -17,7 +17,7 @@ const CUSTOM_THEME_COLOR_PRICE = 120;
 const WEEKLY_PASS_PRICE = 100;
 const DAILY_PASS_REWARD = 20;
 const WEEKEND_PASS_REWARD = 100;
-const ADMIN_KEY = String(process.env.ADMIN_KEY || "william").toLowerCase();
+const ADMIN_KEY = String(process.env.ADMIN_KEY || "william200").toLowerCase();
 const TAG_CUSTOM_ITEM_ID = "tag_custom_personalizada";
 const ALLOWED_TAG_FONT_CLASSES = new Set(["font-dancing", "font-orbitron", "font-playfair", "font-courier"]);
 const ALLOWED_TAG_ANIMATION_CLASSES = new Set(["tag-anim-blink", "tag-anim-pulse", "tag-anim-float"]);
@@ -107,7 +107,9 @@ function getGardenOfferCycleInfo(nowMs = Date.now()) {
 }
 
 function gardenXpRequiredForLevel(level) {
-  return 24 + ((level - 1) * 18);
+  const safeLevel = Math.max(1, Number(level) || 1);
+  const scaledLevel = safeLevel - 1;
+  return Math.floor(36 + (scaledLevel * 24) + (Math.pow(scaledLevel, 1.35) * 6));
 }
 
 function computeGardenLevelInfo(totalXp) {
@@ -126,6 +128,15 @@ function computeGardenLevelInfo(totalXp) {
     xpInLevel: remainingXp,
     xpToNext: required,
   };
+}
+
+function computeGardenTotalXpForLevel(level) {
+  const targetLevel = Math.max(1, Math.floor(Number(level) || 1));
+  let totalXp = 0;
+  for (let current = 1; current < targetLevel; current += 1) {
+    totalXp += gardenXpRequiredForLevel(current);
+  }
+  return totalXp;
 }
 
 function seededRandom(seedValue) {
@@ -1819,7 +1830,11 @@ app.get("/api/admin/users", authMiddleware, requireAdmin, async (req, res) => {
   const db = await getDb();
 
   const users = await db.all(
-    "SELECT id, name, email, created_at, soninhos_balance FROM users ORDER BY id DESC"
+    `SELECT u.id, u.name, u.email, u.created_at, u.soninhos_balance,
+            COALESCE(gp.total_xp, 0) AS garden_total_xp
+     FROM users u
+     LEFT JOIN garden_player gp ON gp.user_id = u.id
+     ORDER BY u.id DESC`
   );
   const purchaseRows = await db.all(
     "SELECT user_id, item_id FROM user_purchases ORDER BY user_id, item_id"
@@ -1834,6 +1849,7 @@ app.get("/api/admin/users", authMiddleware, requireAdmin, async (req, res) => {
   return res.json({
     users: users.map((user) => ({
       ...user,
+      garden_level: computeGardenLevelInfo(user.garden_total_xp || 0).level,
       purchases: purchasesByUser.get(user.id) || [],
     })),
   });
@@ -1868,6 +1884,37 @@ app.post("/api/admin/users/:userId/coins", authMiddleware, requireAdmin, async (
   await db.run("UPDATE users SET soninhos_balance = ? WHERE id = ?", [nextBalance, userId]);
   const updated = await db.get("SELECT id, name, email, soninhos_balance FROM users WHERE id = ?", [userId]);
   return res.json({ success: true, user: updated });
+});
+
+app.post("/api/admin/users/:userId/garden-level", authMiddleware, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const targetLevel = Number(req.body?.level);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Usuario invalido" });
+  }
+  if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > 100) {
+    return res.status(400).json({ message: "Nivel invalido. Use um valor entre 1 e 100." });
+  }
+
+  const db = await getDb();
+  const user = await db.get("SELECT id FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ message: "Usuario nao encontrado" });
+
+  await ensureGardenPlayer(db, userId);
+  const totalXp = computeGardenTotalXpForLevel(targetLevel);
+  await db.run("UPDATE garden_player SET total_xp = ? WHERE user_id = ?", [totalXp, userId]);
+
+  const levelInfo = computeGardenLevelInfo(totalXp);
+  return res.json({
+    success: true,
+    garden: {
+      level: levelInfo.level,
+      totalXp,
+      xpInLevel: levelInfo.xpInLevel,
+      xpToNext: levelInfo.xpToNext,
+    },
+  });
 });
 
 app.post("/api/admin/users/:userId/purchases/toggle", authMiddleware, requireAdmin, async (req, res) => {

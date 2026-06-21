@@ -308,6 +308,26 @@
             <div id="customWallpaperList" class="shop-wallpaper-list"></div>
           </div>
 
+          <div id="shopGrid" class="shop-grid"></div>
+          <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
+        </section>
+
+        <section id="tab-admin" class="tab-panel">
+          <div class="card panel-head">
+            <h3>Admin</h3>
+            <p class="shop-balance-header">Area restrita</p>
+          </div>
+
+          <div id="adminAccessCard" class="card shop-admin-card">
+            <h4>Acesso do Admin</h4>
+            <p class="shop-wallpaper-help">Digite a senha para liberar o painel administrativo.</p>
+            <form id="adminAccessForm" class="inline-form shop-wallpaper-form">
+              <input type="password" id="adminAccessPassword" placeholder="Senha admin" autocomplete="current-password" required />
+              <button type="submit" class="btn-primary">Entrar no admin</button>
+            </form>
+            <p id="adminAccessStatus" class="message"></p>
+          </div>
+
           <div id="shopAdminPanel" class="card shop-admin-card hidden">
             <h4>Painel Admin</h4>
             <p class="shop-wallpaper-help">Gerencie contas, soninhos e itens comprados.</p>
@@ -318,11 +338,15 @@
 
               <label for="adminCoinsAmount">Valor de soninhos</label>
               <input type="number" id="adminCoinsAmount" min="1" value="100" />
+
+              <label for="adminGardenLevel">Nivel do jardim</label>
+              <input type="number" id="adminGardenLevel" min="1" max="100" value="1" />
             </div>
 
             <div class="shop-admin-actions">
               <button type="button" id="adminAddCoinsBtn" class="btn-primary">Adicionar soninhos</button>
               <button type="button" id="adminRemoveCoinsBtn" class="btn-ghost">Remover soninhos</button>
+              <button type="button" id="adminSetGardenLevelBtn" class="btn-ghost">Definir nivel do jardim</button>
             </div>
 
             <div class="shop-admin-grid">
@@ -349,9 +373,6 @@
             <h5>Contas registradas</h5>
             <div id="adminAccountsList" class="friend-list"></div>
           </div>
-
-          <div id="shopGrid" class="shop-grid"></div>
-          <p id="shopMessage" class="message" style="text-align:center;padding:8px;"></p>
         </section>
 
         <section id="tab-garden" class="tab-panel">
@@ -559,6 +580,7 @@
         <button class="nav-btn" data-tab="stats" title="Estatisticas">📊<span>Estatisticas</span></button>
         <button class="nav-btn" data-tab="friends" title="Amigos">👥<span>Amigos</span></button>
         <button class="nav-btn" data-tab="shop" title="Loja">🛍️<span>Loja</span></button>
+        <button class="nav-btn" data-tab="admin" title="Admin">🛡️<span>Admin</span></button>
         <button class="nav-btn" data-tab="garden" title="Jardim">🌱<span>Jardim</span></button>
         <button class="nav-btn" data-tab="pass" title="Passe">🎫<span>Passe</span></button>
       </nav>
