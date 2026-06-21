@@ -551,6 +551,16 @@ export async function getDb() {
       '/garden-decor/arbusto.png',
       'object',
     ],
+    [
+      'totem_colheita',
+      'Casa rustica padrão',
+      'Ao equipar no jardim: todas as plantas recebem +5% de soninhos e crescem 10% mais rapido.',
+      5500,
+      'epica',
+      '#a567ff',
+      '/garden-decor/Casa rustica padrão.png',
+      'object',
+    ],
   ];
 
   for (const [id, name, description, price, rarity, rarityColor, assetPath, sceneMode] of gardenDecorItems) {

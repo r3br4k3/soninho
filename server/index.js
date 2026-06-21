@@ -24,6 +24,9 @@ const ALLOWED_TAG_ANIMATION_CLASSES = new Set(["tag-anim-blink", "tag-anim-pulse
 const GARDEN_OFFER_WINDOW_MS = 5 * 60 * 1000;
 const GARDEN_MAX_SLOTS = 8;
 const GARDEN_BASE_SLOTS = 2;
+const GARDEN_GLOBAL_DECOR_BUFF_ID = "totem_colheita";
+const GARDEN_GLOBAL_SONINHOS_BONUS = 0.05;
+const GARDEN_GLOBAL_GROWTH_SPEED_BONUS = 0.10;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -137,6 +140,26 @@ function computeGardenTotalXpForLevel(level) {
     totalXp += gardenXpRequiredForLevel(current);
   }
   return totalXp;
+}
+
+function getEffectiveReadyAtMs(plantedAtIso, readyAtIso, hasGrowthBoost = false) {
+  const readyAtMs = Date.parse(readyAtIso);
+  const plantedAtMs = Date.parse(plantedAtIso);
+  if (!hasGrowthBoost || !Number.isFinite(readyAtMs) || !Number.isFinite(plantedAtMs) || readyAtMs <= plantedAtMs) {
+    return readyAtMs;
+  }
+  return plantedAtMs + ((readyAtMs - plantedAtMs) * (1 - GARDEN_GLOBAL_GROWTH_SPEED_BONUS));
+}
+
+async function hasGardenGlobalDecorBuff(db, userId) {
+  const row = await db.get(
+    `SELECT 1
+     FROM garden_decor_inventory
+     WHERE user_id = ? AND decor_id = ? AND equipped = 1 AND quantity > 0
+     LIMIT 1`,
+    [userId, GARDEN_GLOBAL_DECOR_BUFF_ID]
+  );
+  return Boolean(row);
 }
 
 function seededRandom(seedValue) {
@@ -351,6 +374,7 @@ async function getGardenSnapshot(db, userId) {
     [userId]
   );
   const equippedDecorItems = decorInventory.filter((item) => Number(item.equipped) === 1);
+  const hasGlobalDecorBuff = equippedDecorItems.some((item) => item.decor_id === GARDEN_GLOBAL_DECOR_BUFF_ID);
   const equippedDecor = equippedDecorItems[0] || null;
 
   const nowMs = Date.now();
@@ -372,7 +396,10 @@ async function getGardenSnapshot(db, userId) {
       name: plant.name,
       seedCost: Number(plant.seed_cost) || 0,
       growMinutes: Number(plant.grow_minutes) || 0,
-      harvestReward: Number(plant.harvest_reward) || 0,
+      harvestReward: Math.max(
+        1,
+        Math.round((Number(plant.harvest_reward) || 0) * (hasGlobalDecorBuff ? (1 + GARDEN_GLOBAL_SONINHOS_BONUS) : 1))
+      ),
       xpReward: Number(plant.xp_reward) || 0,
       unlockLevel: Number(plant.unlock_level) || 1,
       rarity: plant.rarity,
@@ -381,31 +408,38 @@ async function getGardenSnapshot(db, userId) {
       seedQuantity: seedMap.get(plant.id) || 0,
       unlocked: levelInfo.level >= (Number(plant.unlock_level) || 1),
     })),
-    crops: crops.map((crop) => ({
-      id: crop.id,
-      slotIndex: Number(crop.slot_index),
-      plantId: crop.plant_id,
-      plantName: crop.name,
-      plantedAt: crop.planted_at,
-      readyAt: crop.ready_at,
-      isReady: Date.parse(crop.ready_at) <= nowMs,
-      growthMultiplier: Number(crop.growth_multiplier) || 1,
-      yieldMultiplier: Number(crop.yield_multiplier) || 1,
-      xpMultiplier: Number(crop.xp_multiplier) || 1,
-      luckBonus: Number(crop.luck_bonus) || 0,
-      baseReward: Number(crop.harvest_reward) || 0,
-      baseXp: Number(crop.xp_reward) || 0,
-      plantIcon: crop.plant_icon || '🌱',
-      plantRarityColor: crop.plant_rarity_color || '#9ea3ad',
-      appliedItem: crop.applied_item_template_id
-        ? {
-            id: crop.applied_item_template_id,
-            name: crop.item_name || 'Item',
-            icon: crop.item_icon || '🧰',
-            rarityColor: crop.item_rarity_color || '#9ea3ad',
-          }
-        : null,
-    })),
+    crops: crops.map((crop) => {
+      const effectiveReadyAtMs = getEffectiveReadyAtMs(crop.planted_at, crop.ready_at, hasGlobalDecorBuff);
+      const effectiveReadyAtIso = Number.isFinite(effectiveReadyAtMs) ? new Date(effectiveReadyAtMs).toISOString() : crop.ready_at;
+      return {
+        id: crop.id,
+        slotIndex: Number(crop.slot_index),
+        plantId: crop.plant_id,
+        plantName: crop.name,
+        plantedAt: crop.planted_at,
+        readyAt: effectiveReadyAtIso,
+        isReady: Number.isFinite(effectiveReadyAtMs) ? effectiveReadyAtMs <= nowMs : Date.parse(crop.ready_at) <= nowMs,
+        growthMultiplier: Number(crop.growth_multiplier) || 1,
+        yieldMultiplier: Number(crop.yield_multiplier) || 1,
+        xpMultiplier: Number(crop.xp_multiplier) || 1,
+        luckBonus: Number(crop.luck_bonus) || 0,
+        baseReward: Math.max(
+          1,
+          Math.round((Number(crop.harvest_reward) || 0) * (hasGlobalDecorBuff ? (1 + GARDEN_GLOBAL_SONINHOS_BONUS) : 1))
+        ),
+        baseXp: Number(crop.xp_reward) || 0,
+        plantIcon: crop.plant_icon || '🌱',
+        plantRarityColor: crop.plant_rarity_color || '#9ea3ad',
+        appliedItem: crop.applied_item_template_id
+          ? {
+              id: crop.applied_item_template_id,
+              name: crop.item_name || 'Item',
+              icon: crop.item_icon || '🧰',
+              rarityColor: crop.item_rarity_color || '#9ea3ad',
+            }
+          : null,
+      };
+    }),
     offers,
     inventory: inventory.map((item) => ({
       templateId: item.template_id,
@@ -2188,6 +2222,11 @@ app.post("/api/garden/plant", authMiddleware, async (req, res) => {
     };
   }
 
+  const hasGlobalDecorBuff = await hasGardenGlobalDecorBuff(db, req.user.id);
+  if (hasGlobalDecorBuff) {
+    growthMultiplier = Math.max(0.20, growthMultiplier * (1 - GARDEN_GLOBAL_GROWTH_SPEED_BONUS));
+  }
+
   const now = new Date();
   const growMs = Math.max(60 * 1000, Math.round(Number(plant.grow_minutes || 1) * 60 * 1000 * growthMultiplier));
   const readyAt = new Date(now.getTime() + growMs);
@@ -2222,7 +2261,7 @@ app.post("/api/garden/harvest", authMiddleware, async (req, res) => {
 
   const db = await getDb();
   const crop = await db.get(
-    `SELECT gc.id, gc.user_id, gc.slot_index, gc.ready_at, gc.yield_multiplier, gc.xp_multiplier, gc.luck_bonus,
+    `SELECT gc.id, gc.user_id, gc.slot_index, gc.planted_at, gc.ready_at, gc.yield_multiplier, gc.xp_multiplier, gc.luck_bonus,
             gc.applied_item_template_id, gut.name AS item_name, gut.icon AS item_icon,
             gp.name, gp.harvest_reward, gp.xp_reward
      FROM garden_crops gc
@@ -2234,12 +2273,16 @@ app.post("/api/garden/harvest", authMiddleware, async (req, res) => {
   if (!crop) return res.status(404).json({ message: "Nao ha planta ativa nesse espaco" });
 
   const nowMs = Date.now();
-  const readyAtMs = Date.parse(crop.ready_at);
+  const hasGlobalDecorBuff = await hasGardenGlobalDecorBuff(db, req.user.id);
+  const readyAtMs = getEffectiveReadyAtMs(crop.planted_at, crop.ready_at, hasGlobalDecorBuff);
   if (!Number.isFinite(readyAtMs) || nowMs < readyAtMs) {
     return res.status(400).json({ message: "A planta ainda nao esta pronta para colheita" });
   }
 
   let reward = Math.max(1, Math.round((Number(crop.harvest_reward) || 1) * (Number(crop.yield_multiplier) || 1)));
+  if (hasGlobalDecorBuff) {
+    reward = Math.max(1, Math.round(reward * (1 + GARDEN_GLOBAL_SONINHOS_BONUS)));
+  }
   const xp = Math.max(1, Math.round((Number(crop.xp_reward) || 1) * (Number(crop.xp_multiplier) || 1)));
   const luckyTriggerChance = Math.max(0, Math.min(0.8, Number(crop.luck_bonus) || 0));
   const luckyHit = luckyTriggerChance > 0 && Math.random() < luckyTriggerChance;
