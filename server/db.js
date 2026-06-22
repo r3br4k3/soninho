@@ -592,7 +592,7 @@ export async function getDb() {
       'arvore_simples',
       'Arvore simples',
       'Arvore decorativa para compor cenarios campestres no jardim.',
-      700,
+      400,
       'incomum',
       '#5bc28f',
       '/garden-decor/Arvoresimples.png',
