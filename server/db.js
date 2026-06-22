@@ -648,6 +648,17 @@ export async function getDb() {
       '/garden-decor/Arvorepequena.png',
       'object',
     ],
+
+        [
+      'my_melody',
+      'my melody',
+      'my_melody de teste para o jardim.',
+      500,
+      'Mitico',
+      '#5fae5f',
+      '/garden-decor/mymelody.png',
+      'object',
+    ],
   ];
 
   for (const [id, name, description, price, rarity, rarityColor, assetPath, sceneMode] of gardenDecorItems) {
