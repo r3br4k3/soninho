@@ -247,7 +247,6 @@ const GLOBAL_EVENT_LABELS = {
   xp_extra: (mult) => `Colheita de XP extra ${mult}x`,
   soninhos_extra: (mult) => `Colheita de soninhos extra ${mult}x`,
   tempo_reduzido: (mult) => `Tempo reduzido ${mult}x`,
-  xp_soninho_tempo: (mult) => `Evento XP, soninhos e tempo ${mult}x`,
 };
 
 function buildGlobalEventLabel(eventKey, multiplier) {
