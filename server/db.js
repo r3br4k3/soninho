@@ -656,7 +656,7 @@ export async function getDb() {
       500,
       'Mitico',
       '#5fae5f',
-      '/garden-decor/mymelody.png',
+      '/garden-decor/mymelody.gif',
       'object',
     ],
   ];
