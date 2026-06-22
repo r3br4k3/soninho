@@ -649,7 +649,7 @@ export async function getDb() {
       'object',
     ],
 
-        [
+    [
       'my_melody',
       'my melody',
       'my_melody de teste para o jardim.',
@@ -659,6 +659,8 @@ export async function getDb() {
       '/garden-decor/mymelody.gif',
       'object',
     ],
+
+    []
   ];
 
   for (const [id, name, description, price, rarity, rarityColor, assetPath, sceneMode] of gardenDecorItems) {
