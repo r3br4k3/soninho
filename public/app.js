@@ -76,8 +76,11 @@ const state = {
     ownedProfileRewards: [],
   },
   adminUnlocked: false,
+  adminView: 'accounts',
   adminUsers: [],
   adminShopItems: [],
+  adminGlobalEvent: null,
+  globalEvent: null,
   garden: {
     player: null,
     plants: [],
@@ -176,6 +179,18 @@ const adminStatus = document.getElementById('adminStatus');
 const adminAccountsList = document.getElementById('adminAccountsList');
 const adminNewPassword = document.getElementById('adminNewPassword');
 const adminResetPasswordBtn = document.getElementById('adminResetPasswordBtn');
+const adminAccountsView = document.getElementById('adminAccountsView');
+const adminEventsView = document.getElementById('adminEventsView');
+const adminGlobalEventType = document.getElementById('adminGlobalEventType');
+const adminGlobalEventMultiplier = document.getElementById('adminGlobalEventMultiplier');
+const adminGlobalEventMinutes = document.getElementById('adminGlobalEventMinutes');
+const adminGlobalEventPreview = document.getElementById('adminGlobalEventPreview');
+const adminStartGlobalEventBtn = document.getElementById('adminStartGlobalEventBtn');
+const adminStopGlobalEventBtn = document.getElementById('adminStopGlobalEventBtn');
+const adminGlobalEventStatus = document.getElementById('adminGlobalEventStatus');
+const globalEventBanner = document.getElementById('globalEventBanner');
+const globalEventBannerLabel = document.getElementById('globalEventBannerLabel');
+const globalEventBannerCountdown = document.getElementById('globalEventBannerCountdown');
 const passWeekTitle = document.getElementById('passWeekTitle');
 const passWeekLabel = document.getElementById('passWeekLabel');
 const passStatusBadge = document.getElementById('passStatusBadge');
@@ -228,6 +243,24 @@ const DEFAULT_PROFILE_AVATAR = '/avatar-boneco-sem-rosto.svg';
 
 const ADMIN_API_KEY = 'william200';
 const ADMIN_PANEL_PASSWORD = 'william200';
+const GLOBAL_EVENT_LABELS = {
+  xp_extra: (mult) => `Colheita de XP extra ${mult}x`,
+  soninhos_extra: (mult) => `Colheita de soninhos extra ${mult}x`,
+  tempo_reduzido: (mult) => `Tempo reduzido ${mult}x`,
+};
+
+function buildGlobalEventLabel(eventKey, multiplier) {
+  const mult = Math.max(1, Math.floor(Number(multiplier) || 1));
+  const builder = GLOBAL_EVENT_LABELS[eventKey];
+  return builder ? builder(mult) : 'Evento global';
+}
+
+function updateAdminGlobalEventPreview() {
+  if (!adminGlobalEventPreview) return;
+  const eventKey = String(adminGlobalEventType?.value || 'xp_extra');
+  const multiplier = Number(adminGlobalEventMultiplier?.value || 1);
+  adminGlobalEventPreview.textContent = `Preview: ${buildGlobalEventLabel(eventKey, multiplier)}`;
+}
 
 function adminApi(path, options = {}) {
   return api(path, {
@@ -328,17 +361,134 @@ function updateAdminPurchaseState() {
   adminTogglePurchaseBtn.textContent = owned ? 'Marcar como nao comprado' : 'Marcar como comprado';
 }
 
+function setAdminView(viewName) {
+  state.adminView = viewName === 'events' ? 'events' : 'accounts';
+  document.querySelectorAll('.admin-section-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.adminView === state.adminView);
+  });
+  if (adminAccountsView) adminAccountsView.classList.toggle('hidden', state.adminView !== 'accounts');
+  if (adminEventsView) adminEventsView.classList.toggle('hidden', state.adminView !== 'events');
+}
+
+function renderAdminGlobalEvent() {
+  if (!adminGlobalEventStatus) return;
+
+  const event = state.adminGlobalEvent;
+  if (!event?.active) {
+    adminGlobalEventStatus.textContent = 'Nenhum evento global ativo no momento.';
+    adminGlobalEventStatus.style.color = '#7f6edc';
+    return;
+  }
+
+  const label = event.displayName || buildGlobalEventLabel(event.eventKey, event.multiplier);
+  const remainingText = formatDurationMs(event.remainingMs || 0);
+  adminGlobalEventStatus.textContent = `Ativo: ${label} — restam ${remainingText}.`;
+  adminGlobalEventStatus.style.color = '#7f6edc';
+}
+
+let globalEventCountdownInterval = null;
+let globalEventRefreshInterval = null;
+
+function stopGlobalEventCountdown() {
+  if (globalEventCountdownInterval) {
+    clearInterval(globalEventCountdownInterval);
+    globalEventCountdownInterval = null;
+  }
+  if (globalEventRefreshInterval) {
+    clearInterval(globalEventRefreshInterval);
+    globalEventRefreshInterval = null;
+  }
+}
+
+function renderGlobalEventBanner() {
+  if (!globalEventBanner || !globalEventBannerLabel || !globalEventBannerCountdown) return;
+
+  const event = state.globalEvent;
+  if (!event?.active || !event.endsAt) {
+    globalEventBanner.classList.add('hidden');
+    globalEventBannerLabel.textContent = '';
+    globalEventBannerCountdown.textContent = '';
+    return;
+  }
+
+  const endsAtMs = Date.parse(event.endsAt);
+  const remainingMs = Number.isFinite(endsAtMs) ? Math.max(0, endsAtMs - Date.now()) : 0;
+  if (remainingMs <= 0) {
+    state.globalEvent = { ...event, active: false, remainingMs: 0 };
+    globalEventBanner.classList.add('hidden');
+    globalEventBannerLabel.textContent = '';
+    globalEventBannerCountdown.textContent = '';
+    return;
+  }
+
+  const label = event.displayName || buildGlobalEventLabel(event.eventKey, event.multiplier);
+  globalEventBanner.classList.remove('hidden');
+  globalEventBannerLabel.textContent = label;
+  globalEventBannerCountdown.textContent = formatDurationMs(remainingMs);
+}
+
+function startGlobalEventCountdown() {
+  stopGlobalEventCountdown();
+  renderGlobalEventBanner();
+  globalEventCountdownInterval = setInterval(() => {
+    renderGlobalEventBanner();
+    if (state.adminUnlocked && state.adminGlobalEvent?.active && state.globalEvent?.endsAt) {
+      const endsAtMs = Date.parse(state.globalEvent.endsAt);
+      state.adminGlobalEvent = {
+        ...state.adminGlobalEvent,
+        remainingMs: Number.isFinite(endsAtMs) ? Math.max(0, endsAtMs - Date.now()) : 0,
+      };
+      renderAdminGlobalEvent();
+    }
+  }, 1000);
+  globalEventRefreshInterval = setInterval(() => {
+    loadGlobalEvent(true);
+  }, 30000);
+}
+
+async function loadGlobalEvent(silent = false) {
+  if (!state.token) return;
+  try {
+    const data = await api('/api/events/global');
+    state.globalEvent = data.event || null;
+    if (state.adminUnlocked) {
+      state.adminGlobalEvent = data.event || null;
+      renderAdminGlobalEvent();
+    }
+    if (state.globalEvent?.active) {
+      startGlobalEventCountdown();
+    } else {
+      stopGlobalEventCountdown();
+      renderGlobalEventBanner();
+    }
+  } catch (err) {
+    if (!silent) {
+      console.warn('Falha ao carregar evento global:', err.message);
+    }
+  }
+}
+
 async function loadAdminData() {
-  const [usersData, itemsData] = await Promise.all([
+  const [usersData, itemsData, eventData] = await Promise.all([
     adminApi('/api/admin/users'),
     adminApi('/api/admin/shop/items'),
+    adminApi('/api/admin/events/global'),
   ]);
 
   state.adminUsers = usersData.users || [];
   state.adminShopItems = itemsData.items || [];
+  state.adminGlobalEvent = eventData?.event || null;
+  state.globalEvent = eventData?.event || null;
   renderAdminSelectors();
   renderAdminAccountsList();
   updateAdminPurchaseState();
+  renderAdminGlobalEvent();
+  if (state.globalEvent?.active) {
+    startGlobalEventCountdown();
+  } else {
+    renderGlobalEventBanner();
+  }
+  setAdminView(state.adminView || 'accounts');
 }
 
 async function unlockAdminPanel() {
@@ -353,10 +503,13 @@ async function unlockAdminPanel() {
 
 function lockAdminPanel() {
   state.adminUnlocked = false;
+  state.adminView = 'accounts';
   if (shopAdminPanel) shopAdminPanel.classList.add('hidden');
   if (adminAccessCard) adminAccessCard.classList.remove('hidden');
   if (adminAccessPassword) adminAccessPassword.value = '';
   if (adminAccessStatus) adminAccessStatus.textContent = '';
+  if (adminGlobalEventStatus) adminGlobalEventStatus.textContent = '';
+  setAdminView('accounts');
 }
 
 async function adjustSelectedUserBalance(signal) {
@@ -433,6 +586,59 @@ async function setSelectedUserGardenLevel() {
     await loadGardenData();
   } catch (err) {
     showMessage(adminStatus, err.message, true);
+  }
+}
+
+async function startGlobalEventFromAdmin() {
+  const eventKey = String(adminGlobalEventType?.value || '').trim();
+  const multiplier = Number(adminGlobalEventMultiplier?.value || 0);
+  const durationMinutes = Number(adminGlobalEventMinutes?.value || 0);
+
+  if (!GLOBAL_EVENT_LABELS[eventKey]) {
+    showMessage(adminGlobalEventStatus, 'Selecione um tipo de evento valido.', true);
+    return;
+  }
+  if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 1000) {
+    showMessage(adminGlobalEventStatus, 'Informe um multiplicador entre 1 e 1000.', true);
+    return;
+  }
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 10080) {
+    showMessage(adminGlobalEventStatus, 'Informe uma duracao valida entre 1 e 10080 minutos.', true);
+    return;
+  }
+
+  try {
+    const result = await adminApi('/api/admin/events/global/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        eventKey,
+        multiplier: Math.floor(multiplier),
+        durationMinutes,
+      }),
+    });
+    state.adminGlobalEvent = result.event || null;
+    state.globalEvent = result.event || null;
+    renderAdminGlobalEvent();
+    startGlobalEventCountdown();
+    showMessage(adminGlobalEventStatus, `Evento iniciado: ${buildGlobalEventLabel(eventKey, multiplier)}`);
+  } catch (err) {
+    showMessage(adminGlobalEventStatus, err.message, true);
+  }
+}
+
+async function stopGlobalEventFromAdmin() {
+  try {
+    const result = await adminApi('/api/admin/events/global/stop', {
+      method: 'POST',
+    });
+    state.adminGlobalEvent = result.event || null;
+    state.globalEvent = result.event || null;
+    renderAdminGlobalEvent();
+    stopGlobalEventCountdown();
+    renderGlobalEventBanner();
+    showMessage(adminGlobalEventStatus, 'Evento encerrado.');
+  } catch (err) {
+    showMessage(adminGlobalEventStatus, err.message, true);
   }
 }
 
@@ -793,12 +999,15 @@ function logout() {
   stopFriendLocationPolling();
   stopGardenRefresh();
   stopGardenCountdown();
+  stopGlobalEventCountdown();
+  renderGlobalEventBanner();
   state.locationSharingEnabled = false;
   lockAdminPanel();
 
   state.user = null;
   state.token = '';
   state.soninhos = 0;
+  state.globalEvent = null;
   state.equipped = { active_font: null, active_tag_effect: null, active_wallpaper: null };
   state.pass = {
     active: false,
@@ -2360,7 +2569,8 @@ function renderGardenSlots() {
     const readyAt = Date.parse(crop.readyAt);
     const isReady = Number.isFinite(readyAt) && Date.now() >= readyAt;
     const remaining = isReady ? 0 : Math.max(0, readyAt - Date.now());
-    const expectedReward = Math.max(1, Math.round((crop.baseReward || 1) * (crop.yieldMultiplier || 1)));
+    const expectedReward = crop.previewReward ?? Math.max(1, Math.round((crop.baseReward || 1) * (crop.yieldMultiplier || 1)));
+    const expectedXp = crop.previewXp ?? Math.max(1, Math.round((crop.baseXp || 1) * (crop.xpMultiplier || 1)));
 
     const harvestBtn = document.createElement('button');
     harvestBtn.type = 'button';
@@ -2379,7 +2589,7 @@ function renderGardenSlots() {
     statusLine.textContent = isReady ? 'Pronto para colher!' : `Tempo restante: ${formatDurationMs(remaining)}`;
 
     const rewardLine = document.createElement('small');
-    rewardLine.textContent = `Colheita prevista: ✨ ${expectedReward}`;
+    rewardLine.textContent = `Colheita prevista: ✨ ${expectedReward} • +${expectedXp} XP`;
 
     const title = document.createElement('h5');
     title.innerHTML = `<span class="garden-plant-icon" style="background:${escapeHtml(crop.plantRarityColor || '#9ea3ad')};">${escapeHtml(crop.plantIcon || '🌱')}</span> Espaco ${slot} • ${escapeHtml(crop.plantName)}`;
@@ -3406,6 +3616,7 @@ async function bootstrapAppData() {
     await loadPassData();
     await loadGardenData();
     await loadGardenDecorData();
+    await loadGlobalEvent();
   } catch (err) {
     showMessage(dreamMessage, err.message, true);
   }
@@ -3708,6 +3919,12 @@ function attachEvents() {
     });
   }
 
+  document.querySelectorAll('.admin-section-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setAdminView(btn.dataset.adminView || 'accounts');
+    });
+  });
+
   if (removeCustomWallpaperBtn) {
     removeCustomWallpaperBtn.addEventListener('click', async () => {
       await removeCustomWallpaper();
@@ -3776,6 +3993,25 @@ function attachEvents() {
     adminSetGardenLevelBtn.addEventListener('click', async () => {
       await setSelectedUserGardenLevel();
     });
+  }
+
+  if (adminStartGlobalEventBtn) {
+    adminStartGlobalEventBtn.addEventListener('click', async () => {
+      await startGlobalEventFromAdmin();
+    });
+  }
+
+  if (adminStopGlobalEventBtn) {
+    adminStopGlobalEventBtn.addEventListener('click', async () => {
+      await stopGlobalEventFromAdmin();
+    });
+  }
+
+  if (adminGlobalEventType) {
+    adminGlobalEventType.addEventListener('change', updateAdminGlobalEventPreview);
+  }
+  if (adminGlobalEventMultiplier) {
+    adminGlobalEventMultiplier.addEventListener('input', updateAdminGlobalEventPreview);
   }
 
   if (adminTogglePurchaseBtn) {
@@ -3878,6 +4114,7 @@ async function registerServiceWorker() {
 async function init() {
   await initDeviceId();
   attachEvents();
+  updateAdminGlobalEventPreview();
   activatePassView(state.passView);
   await registerServiceWorker();
 

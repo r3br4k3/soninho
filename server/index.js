@@ -27,6 +27,33 @@ const GARDEN_BASE_SLOTS = 2;
 const GARDEN_GLOBAL_DECOR_BUFF_ID = "totem_colheita";
 const GARDEN_GLOBAL_SONINHOS_BONUS = 0.05;
 const GARDEN_GLOBAL_GROWTH_SPEED_BONUS = 0.10;
+const GLOBAL_EVENT_KEYS = new Set(["xp_extra", "soninhos_extra", "tempo_reduzido"]);
+
+function buildGlobalEventDisplayName(eventKey, multiplier) {
+  const mult = Math.max(1, Math.floor(Number(multiplier) || 1));
+  if (eventKey === "xp_extra") return `Colheita de XP extra ${mult}x`;
+  if (eventKey === "soninhos_extra") return `Colheita de soninhos extra ${mult}x`;
+  if (eventKey === "tempo_reduzido") return `Tempo reduzido ${mult}x`;
+  return "Evento global";
+}
+
+function getGlobalEventEffects(globalEvent) {
+  if (!globalEvent?.active) {
+    return { xpMult: 1, soninhosMult: 1, growthSpeedMult: 1 };
+  }
+
+  const mult = Math.max(1, Number(globalEvent.multiplier) || 1);
+  if (globalEvent.eventKey === "xp_extra") {
+    return { xpMult: mult, soninhosMult: 1, growthSpeedMult: 1 };
+  }
+  if (globalEvent.eventKey === "soninhos_extra") {
+    return { xpMult: 1, soninhosMult: mult, growthSpeedMult: 1 };
+  }
+  if (globalEvent.eventKey === "tempo_reduzido") {
+    return { xpMult: 1, soninhosMult: 1, growthSpeedMult: mult };
+  }
+  return { xpMult: 1, soninhosMult: 1, growthSpeedMult: 1 };
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -142,13 +169,21 @@ function computeGardenTotalXpForLevel(level) {
   return totalXp;
 }
 
-function getEffectiveReadyAtMs(plantedAtIso, readyAtIso, hasGrowthBoost = false) {
+function getEffectiveReadyAtMs(plantedAtIso, readyAtIso, hasGrowthBoost = false, growthSpeedMult = 1) {
   const readyAtMs = Date.parse(readyAtIso);
   const plantedAtMs = Date.parse(plantedAtIso);
-  if (!hasGrowthBoost || !Number.isFinite(readyAtMs) || !Number.isFinite(plantedAtMs) || readyAtMs <= plantedAtMs) {
+  if (!Number.isFinite(readyAtMs) || !Number.isFinite(plantedAtMs) || readyAtMs <= plantedAtMs) {
     return readyAtMs;
   }
-  return plantedAtMs + ((readyAtMs - plantedAtMs) * (1 - GARDEN_GLOBAL_GROWTH_SPEED_BONUS));
+
+  let duration = readyAtMs - plantedAtMs;
+  if (hasGrowthBoost) {
+    duration *= (1 - GARDEN_GLOBAL_GROWTH_SPEED_BONUS);
+  }
+  if (growthSpeedMult > 1) {
+    duration /= growthSpeedMult;
+  }
+  return plantedAtMs + duration;
 }
 
 async function hasGardenGlobalDecorBuff(db, userId) {
@@ -321,6 +356,9 @@ async function ensureGardenOffersForCycle(db, userId, cycleKey, level) {
 async function getGardenSnapshot(db, userId) {
   await ensureGardenPlayer(db, userId);
 
+  const globalEvent = await readGlobalEventState(db);
+  const eventEffects = getGlobalEventEffects(globalEvent);
+
   const player = await db.get("SELECT total_xp, max_slots FROM garden_player WHERE user_id = ?", [userId]);
   const levelInfo = computeGardenLevelInfo(player?.total_xp || 0);
   const user = await db.get("SELECT soninhos_balance FROM users WHERE id = ?", [userId]);
@@ -409,8 +447,26 @@ async function getGardenSnapshot(db, userId) {
       unlocked: levelInfo.level >= (Number(plant.unlock_level) || 1),
     })),
     crops: crops.map((crop) => {
-      const effectiveReadyAtMs = getEffectiveReadyAtMs(crop.planted_at, crop.ready_at, hasGlobalDecorBuff);
+      const effectiveReadyAtMs = getEffectiveReadyAtMs(
+        crop.planted_at,
+        crop.ready_at,
+        hasGlobalDecorBuff,
+        eventEffects.growthSpeedMult
+      );
       const effectiveReadyAtIso = Number.isFinite(effectiveReadyAtMs) ? new Date(effectiveReadyAtMs).toISOString() : crop.ready_at;
+      const baseReward = Math.max(
+        1,
+        Math.round((Number(crop.harvest_reward) || 0) * (hasGlobalDecorBuff ? (1 + GARDEN_GLOBAL_SONINHOS_BONUS) : 1))
+      );
+      const baseXp = Number(crop.xp_reward) || 0;
+      const previewReward = Math.max(
+        1,
+        Math.round(baseReward * (Number(crop.yield_multiplier) || 1) * eventEffects.soninhosMult)
+      );
+      const previewXp = Math.max(
+        1,
+        Math.round(baseXp * (Number(crop.xp_multiplier) || 1) * eventEffects.xpMult)
+      );
       return {
         id: crop.id,
         slotIndex: Number(crop.slot_index),
@@ -423,11 +479,10 @@ async function getGardenSnapshot(db, userId) {
         yieldMultiplier: Number(crop.yield_multiplier) || 1,
         xpMultiplier: Number(crop.xp_multiplier) || 1,
         luckBonus: Number(crop.luck_bonus) || 0,
-        baseReward: Math.max(
-          1,
-          Math.round((Number(crop.harvest_reward) || 0) * (hasGlobalDecorBuff ? (1 + GARDEN_GLOBAL_SONINHOS_BONUS) : 1))
-        ),
-        baseXp: Number(crop.xp_reward) || 0,
+        baseReward,
+        baseXp,
+        previewReward,
+        previewXp,
         plantIcon: crop.plant_icon || '🌱',
         plantRarityColor: crop.plant_rarity_color || '#9ea3ad',
         appliedItem: crop.applied_item_template_id
@@ -769,6 +824,55 @@ async function resolveViewerTargetUserId(db, viewerId, requestedUserId) {
   const canView = await areFriends(db, viewerId, targetUserId);
   if (!canView) throw new Error("Acesso permitido apenas para amigos");
   return targetUserId;
+}
+
+async function readGlobalEventState(db) {
+  const row = await db.get(
+    "SELECT event_key, event_name, multiplier, is_active, starts_at, ends_at FROM global_event_state WHERE id = 1"
+  );
+
+  if (!row) {
+    return {
+      active: false,
+      eventKey: null,
+      eventName: null,
+      displayName: null,
+      multiplier: 1,
+      startsAt: null,
+      endsAt: null,
+      remainingMs: 0,
+    };
+  }
+
+  const nowMs = Date.now();
+  const endsAtMs = Date.parse(row.ends_at || "");
+  const stillActive = Boolean(row.is_active) && Number.isFinite(endsAtMs) && endsAtMs > nowMs;
+
+  if (Boolean(row.is_active) && !stillActive) {
+    await db.run(
+      `UPDATE global_event_state
+       SET is_active = 0,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = 1`
+    );
+  }
+
+  const multiplier = Math.max(1, Number(row.multiplier) || 1);
+  const eventKey = row.event_key || null;
+  const displayName = stillActive
+    ? (row.event_name || buildGlobalEventDisplayName(eventKey, multiplier))
+    : null;
+
+  return {
+    active: stillActive,
+    eventKey,
+    eventName: row.event_name || null,
+    displayName,
+    multiplier,
+    startsAt: row.starts_at || null,
+    endsAt: row.ends_at || null,
+    remainingMs: stillActive ? Math.max(0, endsAtMs - nowMs) : 0,
+  };
 }
 
 app.post("/api/auth/register", async (req, res) => {
@@ -2017,6 +2121,72 @@ app.post("/api/admin/users/:userId/password", authMiddleware, requireAdmin, asyn
   return res.json({ success: true, message: "Senha trocada com sucesso." });
 });
 
+app.get("/api/events/global", authMiddleware, async (req, res) => {
+  const db = await getDb();
+  const eventState = await readGlobalEventState(db);
+  return res.json({ event: eventState });
+});
+
+app.get("/api/admin/events/global", authMiddleware, requireAdmin, async (req, res) => {
+  const db = await getDb();
+  const eventState = await readGlobalEventState(db);
+  return res.json({ event: eventState });
+});
+
+app.post("/api/admin/events/global/start", authMiddleware, requireAdmin, async (req, res) => {
+  const eventKey = String(req.body?.eventKey || "").trim();
+  const durationMinutes = Number(req.body?.durationMinutes);
+  const multiplier = Number(req.body?.multiplier);
+
+  if (!GLOBAL_EVENT_KEYS.has(eventKey)) {
+    return res.status(400).json({ message: "Tipo de evento invalido." });
+  }
+  if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 1000) {
+    return res.status(400).json({ message: "Multiplicador invalido. Use de 1 a 1000." });
+  }
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 10080) {
+    return res.status(400).json({ message: "Duracao invalida. Use de 1 a 10080 minutos." });
+  }
+
+  const safeMultiplier = Math.max(1, Math.floor(multiplier));
+  const eventName = buildGlobalEventDisplayName(eventKey, safeMultiplier);
+
+  const db = await getDb();
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt.getTime() + (durationMinutes * 60 * 1000));
+
+  await db.run(
+    `INSERT INTO global_event_state (id, event_key, event_name, multiplier, is_active, starts_at, ends_at, updated_at)
+     VALUES (1, ?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(id) DO UPDATE SET
+       event_key = excluded.event_key,
+       event_name = excluded.event_name,
+       multiplier = excluded.multiplier,
+       is_active = excluded.is_active,
+       starts_at = excluded.starts_at,
+       ends_at = excluded.ends_at,
+       updated_at = CURRENT_TIMESTAMP`,
+    [eventKey, eventName, safeMultiplier, startsAt.toISOString(), endsAt.toISOString()]
+  );
+
+  const eventState = await readGlobalEventState(db);
+  return res.json({ success: true, event: eventState });
+});
+
+app.post("/api/admin/events/global/stop", authMiddleware, requireAdmin, async (req, res) => {
+  const db = await getDb();
+  await db.run(
+    `INSERT INTO global_event_state (id, event_key, event_name, multiplier, is_active, starts_at, ends_at, updated_at)
+     VALUES (1, NULL, NULL, 1, 0, NULL, NULL, CURRENT_TIMESTAMP)
+     ON CONFLICT(id) DO UPDATE SET
+       is_active = 0,
+       updated_at = CURRENT_TIMESTAMP`
+  );
+
+  const eventState = await readGlobalEventState(db);
+  return res.json({ success: true, event: eventState });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Ranking Global ──────────────────────────────────────────────────────────
@@ -2227,6 +2397,12 @@ app.post("/api/garden/plant", authMiddleware, async (req, res) => {
     growthMultiplier = Math.max(0.20, growthMultiplier * (1 - GARDEN_GLOBAL_GROWTH_SPEED_BONUS));
   }
 
+  const globalEvent = await readGlobalEventState(db);
+  const eventEffects = getGlobalEventEffects(globalEvent);
+  if (eventEffects.growthSpeedMult > 1) {
+    growthMultiplier = Math.max(0.10, growthMultiplier / eventEffects.growthSpeedMult);
+  }
+
   const now = new Date();
   const growMs = Math.max(60 * 1000, Math.round(Number(plant.grow_minutes || 1) * 60 * 1000 * growthMultiplier));
   const readyAt = new Date(now.getTime() + growMs);
@@ -2274,7 +2450,14 @@ app.post("/api/garden/harvest", authMiddleware, async (req, res) => {
 
   const nowMs = Date.now();
   const hasGlobalDecorBuff = await hasGardenGlobalDecorBuff(db, req.user.id);
-  const readyAtMs = getEffectiveReadyAtMs(crop.planted_at, crop.ready_at, hasGlobalDecorBuff);
+  const globalEvent = await readGlobalEventState(db);
+  const eventEffects = getGlobalEventEffects(globalEvent);
+  const readyAtMs = getEffectiveReadyAtMs(
+    crop.planted_at,
+    crop.ready_at,
+    hasGlobalDecorBuff,
+    eventEffects.growthSpeedMult
+  );
   if (!Number.isFinite(readyAtMs) || nowMs < readyAtMs) {
     return res.status(400).json({ message: "A planta ainda nao esta pronta para colheita" });
   }
@@ -2283,7 +2466,13 @@ app.post("/api/garden/harvest", authMiddleware, async (req, res) => {
   if (hasGlobalDecorBuff) {
     reward = Math.max(1, Math.round(reward * (1 + GARDEN_GLOBAL_SONINHOS_BONUS)));
   }
-  const xp = Math.max(1, Math.round((Number(crop.xp_reward) || 1) * (Number(crop.xp_multiplier) || 1)));
+  if (eventEffects.soninhosMult > 1) {
+    reward = Math.max(1, Math.round(reward * eventEffects.soninhosMult));
+  }
+  let xp = Math.max(1, Math.round((Number(crop.xp_reward) || 1) * (Number(crop.xp_multiplier) || 1)));
+  if (eventEffects.xpMult > 1) {
+    xp = Math.max(1, Math.round(xp * eventEffects.xpMult));
+  }
   const luckyTriggerChance = Math.max(0, Math.min(0.8, Number(crop.luck_bonus) || 0));
   const luckyHit = luckyTriggerChance > 0 && Math.random() < luckyTriggerChance;
   if (luckyHit) {

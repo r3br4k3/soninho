@@ -91,6 +91,12 @@
         <button id="logoutBtn" class="btn-ghost">Sair</button>
       </header>
 
+      <div id="globalEventBanner" class="global-event-banner hidden" role="status" aria-live="polite">
+        <span class="global-event-banner-icon" aria-hidden="true">🎉</span>
+        <span id="globalEventBannerLabel" class="global-event-banner-label"></span>
+        <span id="globalEventBannerCountdown" class="global-event-banner-countdown"></span>
+      </div>
+
       <main class="content">
         <section id="tab-journal" class="tab-panel active">
           <div class="card panel-head">
@@ -332,6 +338,13 @@
             <h4>Painel Admin</h4>
             <p class="shop-wallpaper-help">Gerencie contas, soninhos e itens comprados.</p>
 
+            <div class="admin-section-tabs">
+              <button type="button" class="admin-section-btn active" data-admin-view="accounts">Contas</button>
+              <button type="button" class="admin-section-btn" data-admin-view="events">Eventos globais</button>
+            </div>
+
+            <div id="adminAccountsView">
+
             <div class="shop-admin-grid">
               <label for="adminUserSelect">Conta</label>
               <select id="adminUserSelect"></select>
@@ -372,6 +385,34 @@
 
             <h5>Contas registradas</h5>
             <div id="adminAccountsList" class="friend-list"></div>
+            </div>
+
+            <div id="adminEventsView" class="hidden">
+              <p class="shop-wallpaper-help">Escolha o tipo de evento, o multiplicador e a duracao. Todos os usuarios veem o banner no site.</p>
+              <div class="shop-admin-grid">
+                <label for="adminGlobalEventType">Tipo de evento</label>
+                <select id="adminGlobalEventType">
+                  <option value="xp_extra">Colheita de XP extra</option>
+                  <option value="soninhos_extra">Colheita de soninhos extra</option>
+                  <option value="tempo_reduzido">Tempo reduzido (crescimento)</option>
+                </select>
+
+                <label for="adminGlobalEventMultiplier">Multiplicador (ex.: 2, 3, 5, 100)</label>
+                <input type="number" id="adminGlobalEventMultiplier" min="1" max="1000" step="1" value="2" />
+
+                <label for="adminGlobalEventMinutes">Duracao (minutos)</label>
+                <input type="number" id="adminGlobalEventMinutes" min="1" max="10080" value="60" />
+              </div>
+
+              <p id="adminGlobalEventPreview" class="shop-admin-state">Preview: Colheita de XP extra 2x</p>
+
+              <div class="shop-admin-actions">
+                <button type="button" id="adminStartGlobalEventBtn" class="btn-primary">Iniciar evento</button>
+                <button type="button" id="adminStopGlobalEventBtn" class="btn-ghost">Encerrar evento</button>
+              </div>
+
+              <p id="adminGlobalEventStatus" class="message"></p>
+            </div>
           </div>
         </section>
 

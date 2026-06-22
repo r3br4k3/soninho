@@ -306,6 +306,17 @@ export async function getDb() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (decor_id) REFERENCES garden_decor_items(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS global_event_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      event_key TEXT,
+      event_name TEXT,
+      multiplier REAL NOT NULL DEFAULT 1,
+      is_active INTEGER NOT NULL DEFAULT 0,
+      starts_at TEXT,
+      ends_at TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Adiciona coluna soninhos_balance se ainda nao existir (migracao segura)
@@ -421,6 +432,12 @@ export async function getDb() {
 
   try {
     await db.exec('ALTER TABLE garden_crops ADD COLUMN applied_item_template_id TEXT DEFAULT NULL');
+  } catch {
+    // coluna ja existe, sem problema
+  }
+
+  try {
+    await db.exec('ALTER TABLE global_event_state ADD COLUMN multiplier REAL NOT NULL DEFAULT 1');
   } catch {
     // coluna ja existe, sem problema
   }
