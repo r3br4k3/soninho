@@ -632,7 +632,7 @@ export async function getDb() {
       'sol_envergonhado',
       'Sol envergonhado',
       'Sol decorativo com expressao timida para iluminar o jardim.',
-      700,
+      400,
       'raro',
       '#f6c14c',
       '/garden-decor/Solenvergonhado.png',
