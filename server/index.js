@@ -27,13 +27,14 @@ const GARDEN_BASE_SLOTS = 2;
 const GARDEN_GLOBAL_DECOR_BUFF_ID = "totem_colheita";
 const GARDEN_GLOBAL_SONINHOS_BONUS = 0.05;
 const GARDEN_GLOBAL_GROWTH_SPEED_BONUS = 0.10;
-const GLOBAL_EVENT_KEYS = new Set(["xp_extra", "soninhos_extra", "tempo_reduzido"]);
+const GLOBAL_EVENT_KEYS = new Set(["xp_extra", "soninhos_extra", "tempo_reduzido", "xp_soninho_tempo"]);
 
 function buildGlobalEventDisplayName(eventKey, multiplier) {
   const mult = Math.max(1, Math.floor(Number(multiplier) || 1));
   if (eventKey === "xp_extra") return `Colheita de XP extra ${mult}x`;
   if (eventKey === "soninhos_extra") return `Colheita de soninhos extra ${mult}x`;
   if (eventKey === "tempo_reduzido") return `Tempo reduzido ${mult}x`;
+  if (eventKey === "xp_soninho_tempo") return `Evento XP, soninhos e tempo ${mult}x`;
   return "Evento global";
 }
 
@@ -51,6 +52,9 @@ function getGlobalEventEffects(globalEvent) {
   }
   if (globalEvent.eventKey === "tempo_reduzido") {
     return { xpMult: 1, soninhosMult: 1, growthSpeedMult: mult };
+  }
+  if (globalEvent.eventKey === "xp_soninho_tempo") {
+    return { xpMult: mult, soninhosMult: mult, growthSpeedMult: mult };
   }
   return { xpMult: 1, soninhosMult: 1, growthSpeedMult: 1 };
 }
