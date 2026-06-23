@@ -649,16 +649,37 @@ export async function getDb() {
       'object',
     ],
 
-        [
-      'my_melody',
-      'my melody',
-      'my_melody de teste para o jardim.',
+    [
+      'sapo_rei',
+      'Sapo rei',
+      'Um sapo majestoso para decorar o jardim. sera que ele e um principe encantado?',
       500,
-      'Mitico',
+      'Incomum',
       '#5fae5f',
-      '/garden-decor/mymelody.gif',
+      '/garden-decor/saporei.png',
       'object',
     ],
+    [
+      'sapo',
+      'Sapo',
+      'Um sapo comum para dar vida ao jardim.',
+      400,
+      'comum',
+      '#5fae5f',
+      '/garden-decor/sapo.png',
+      'object',
+    ],
+
+    [
+      'lagoa',
+      'Lagoa',
+      'Uma pequena lagoa para trazer tranquilidade ao jardim.',
+      1000,
+      'raro',
+      '#4d9dfb',
+      '/garden-decor/lagoa.png',
+      'object',
+    ]
   ];
 
   for (const [id, name, description, price, rarity, rarityColor, assetPath, sceneMode] of gardenDecorItems) {
