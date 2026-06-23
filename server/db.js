@@ -650,16 +650,6 @@ export async function getDb() {
     ],
 
     [
-      'sapo_rei',
-      'Sapo rei',
-      'Um sapo majestoso para decorar o jardim. sera que ele e um principe encantado?',
-      500,
-      'Incomum',
-      '#5fae5f',
-      '/garden-decor/sapo_rei.png',
-      'object',
-    ],
-    [
       'sapo',
       'Sapo',
       'Um sapo comum para dar vida ao jardim.',
@@ -679,7 +669,69 @@ export async function getDb() {
       '#4d9dfb',
       '/garden-decor/lagoa.png',
       'object',
-    ]
+    ],
+    [
+      'arvore_torcida',
+      'Arvore torcida',
+      'Uma arvore com tronco torcido para um visual unico no jardim.',
+      800,
+      'incomum',
+      '#5bc28f',
+      '/garden-decor/arvore1.png',
+      'object',
+    ],
+    [
+      'arvore_com_espada',
+      'Arvore com Espada',
+      'Uma arvore com uma espada cravada, simbolizando coragem e aventura.',
+      600,
+      'epica',
+      '#a567ff',
+      '/garden-decor/arvore2.png',
+      'object',
+    ],
+    [
+      'arvore_tripla',
+      'Arvore Tripla',
+      'Tres arvores juntas, criando um efeito visual interessante no jardim.',
+      700,
+      'raro',
+      '#4d9dfb',
+      '/garden-decor/arvore3.png',
+      'object',
+    ],
+    [
+      'arbusto_com_pedras',
+      'Arbusto com Pedras',
+      'Um arbusto acompanhado de pedras, trazendo um toque natural ao jardim.',
+      500,
+      'comum',
+      '#5fae5f',
+      '/garden-decor/arbusto2.png',
+      'object',
+    ],
+    [
+      'arbusto_com_flores',
+      'Arbusto com Flores',
+      'Um arbusto com flores azuis, trazendo um toque vibrante ao jardim.',
+      600,
+      'incomum',
+      '#ff69b4',
+      '/garden-decor/arbusto3.png',
+      'object',
+    ],
+    [
+      'ursinho_de_pelucia',
+      'Ursinho de Pelucia',
+      'Um ursinho de pelucia para dar um toque fofo e aconchegante ao jardim.',
+      800,
+      'raro',
+      '#ff69b4',
+      '/garden-decor/ursinho.png',
+      'object',
+    ],
+
+
   ];
 
   for (const [id, name, description, price, rarity, rarityColor, assetPath, sceneMode] of gardenDecorItems) {
