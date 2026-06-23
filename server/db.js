@@ -656,7 +656,7 @@ export async function getDb() {
       500,
       'Incomum',
       '#5fae5f',
-      '/garden-decor/saporei.png',
+      '/garden-decor/sapo_rei.png',
       'object',
     ],
     [
@@ -666,7 +666,7 @@ export async function getDb() {
       400,
       'comum',
       '#5fae5f',
-      '/garden-decor/sapo.png',
+      '/garden-decor/sapo.gif',
       'object',
     ],
 
